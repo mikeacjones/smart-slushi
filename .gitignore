@@ -1,0 +1,96 @@
+# Xcode
+build/
+DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+*.xcscmblueprint
+*.xcscheme
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# CocoaPods (if used)
+Pods/
+*.xcworkspace/xcshareddata/swiftpm/
+
+# Carthage (if used)
+Carthage/Build/
+Carthage/Checkouts/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Code Injection
+iOSInjectionProject/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Xcode Workspaces (keep workspace but ignore user data)
+*.xcworkspace/xcuserdata/
+
+# Archives
+*.xcarchive
+
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Instruments
+*.trace
+
+# Provisioning profiles (don't commit sensitive files)
+*.mobileprovision
+*.provisionprofile
+
+# App Store Connect API keys
+AuthKey_*.p8
+
+# Environment and secrets
+.env
+.env.*
+*.xcconfig.local
+
+# Test outputs
+TestResults/
+*.coverage.txt
+codecov.yml
+
+# Documentation generation
+docs/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# IDE
+.idea/
+.cursor/
+.vscode/
+*.swp
+*.swo
+
+# Screenshots directory (generated, not source)
+Screenshots/
