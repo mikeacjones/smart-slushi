@@ -44,6 +44,7 @@ public struct RecipeBuilderView: View {
     @Environment(IngredientDatabase.self) private var database
     @Environment(RecipeStore.self) private var recipeStore
     @Environment(UserSettingsManager.self) private var settingsManager
+    @Environment(SharedRecipeStore.self) private var sharedRecipeStore
 
     @State private var recipe: Recipe
     @State private var showingIngredientPicker = false
@@ -60,6 +61,8 @@ public struct RecipeBuilderView: View {
     @State private var showingSaveConfirmation = false
     @State private var showingRecipeOutput = false
     @State private var showingBatchScaling = false
+    @State private var showingCommunityRecipes = false
+    @State private var showingPublishSheet = false
 
     private let calculator = SlushCalculator()
     private let optimizer = RecipeOptimizer()
@@ -102,6 +105,21 @@ public struct RecipeBuilderView: View {
                         } label: {
                             Label("Saved Recipes", systemImage: "folder")
                         }
+
+                        Divider()
+
+                        Button {
+                            showingCommunityRecipes = true
+                        } label: {
+                            Label("Community Recipes", systemImage: "globe")
+                        }
+
+                        Button {
+                            showingPublishSheet = true
+                        } label: {
+                            Label("Share to Community", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(recipe.ingredients.isEmpty || recipe.name.isEmpty)
 
                         Divider()
 
@@ -168,6 +186,23 @@ public struct RecipeBuilderView: View {
                 }
                 .environment(database)
                 .environment(settingsManager)
+            }
+            .sheet(isPresented: $showingCommunityRecipes) {
+                SharedRecipesView { importedRecipe in
+                    withAnimation {
+                        recipe = importedRecipe
+                        displayUnit = recipe.targetUnit
+                        batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
+                    }
+                }
+                .environment(sharedRecipeStore)
+                .environment(database)
+                .environment(recipeStore)
+            }
+            .sheet(isPresented: $showingPublishSheet) {
+                PublishRecipeSheet(recipe: recipe)
+                    .environment(sharedRecipeStore)
+                    .environment(database)
             }
         }
     }

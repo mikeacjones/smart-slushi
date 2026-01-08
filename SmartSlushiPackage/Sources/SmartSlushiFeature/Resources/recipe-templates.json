@@ -1,383 +1,763 @@
 {
-  "metadata": {
-    "version": "1.0",
-    "lastUpdated": "2025-01-06",
-    "sources": [
-      "Ford Fry Drink Bible",
+  "categories" : [
+    {
+      "icon" : "🍋",
+      "id" : "margarita",
+      "name" : "Margaritas"
+    },
+    {
+      "icon" : "🍹",
+      "id" : "daiquiri",
+      "name" : "Daiquiris"
+    },
+    {
+      "icon" : "🌴",
+      "id" : "tropical",
+      "name" : "Tropical"
+    },
+    {
+      "icon" : "🍷",
+      "id" : "wine",
+      "name" : "Wine-Based"
+    },
+    {
+      "icon" : "🍸",
+      "id" : "vodka",
+      "name" : "Vodka Cocktails"
+    },
+    {
+      "icon" : "🥃",
+      "id" : "rum",
+      "name" : "Rum Cocktails"
+    }
+  ],
+  "metadata" : {
+    "lastUpdated" : "2026-01-07",
+    "notes" : "All amounts in oz. Recipes are pre-balanced for frozen slush machines (target ABV ~8%, Brix ~14%).",
+    "sources" : [
       "Jeffrey Morgenthaler",
       "Classic cocktail ratios"
     ],
-    "notes": "All amounts in oz. Scale proportionally for desired batch size."
+    "version" : "1.0"
   },
-  "templates": [
+  "templates" : [
     {
-      "id": "frozen-margarita-classic",
-      "name": "Classic Frozen Margarita",
-      "description": "The classic frozen margarita with balanced sweet and tart flavors",
-      "category": "margarita",
-      "baseIngredients": [
-        {"ingredient": "Blanco Tequila", "amount": 1.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Triple Sec (Stirrings)", "amount": 1.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 0.75, "unit": "oz", "scalable": true},
-        {"ingredient": "Simple Syrup (1:1 by volume)", "amount": 0.25, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 1.5,
+          "ingredient" : "Blanco Tequila",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1,
+          "ingredient" : "Triple Sec (Stirrings)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 0.75,
+          "ingredient" : "Fresh Lime Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 3,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 7.25,
+          "ingredient" : "Water",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 18.3,
-        "brixSingleServing": 14.2
+      "category" : "margarita",
+      "description" : "The classic frozen margarita with balanced sweet and tart flavors",
+      "expectedStats" : {
+        "abv" : 6.7,
+        "brix" : 14.1
       },
-      "batchNotes": "For frozen, add water equal to 35-40% of total cocktail volume to dilute ABV to ~10%",
-      "machineReady": {
-        "waterRatio": 0.4,
-        "expectedABV": 10.5,
-        "expectedBrix": 13.8
-      },
-      "tags": ["classic", "tequila", "citrus", "sour"],
-      "servingSize": 11
+      "id" : "frozen-margarita-classic",
+      "name" : "Classic Frozen Margarita",
+      "servingSize" : 14,
+      "tags" : [
+        "classic",
+        "tequila",
+        "citrus",
+        "sour"
+      ]
     },
     {
-      "id": "frozen-margarita-ford-fry",
-      "name": "Ford Fry Frozen Margarita",
-      "description": "Large batch frozen margarita from Superica/El Felix",
-      "category": "margarita",
-      "isBatchRecipe": true,
-      "baseIngredients": [
-        {"ingredient": "Water", "amount": 288, "unit": "oz", "scalable": true},
-        {"ingredient": "Simple Syrup (1:1 by volume)", "amount": 80, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 64, "unit": "oz", "scalable": true},
-        {"ingredient": "Triple Sec (Stirrings)", "amount": 69.75, "unit": "oz", "scalable": true},
-        {"ingredient": "Blanco Tequila", "amount": 101.5, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 2,
+          "ingredient" : "Blanco Tequila",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1,
+          "ingredient" : "Fresh Lime Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 2.5,
+          "ingredient" : "Agave Syrup (2:1 diluted)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 6.5,
+          "ingredient" : "Water",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "yield": {
-        "totalOz": 603.25,
-        "servings": 54,
-        "servingSizeOz": 11
+      "category" : "margarita",
+      "description" : "The 'skinny' margarita with agave instead of triple sec",
+      "expectedStats" : {
+        "abv" : 6.7,
+        "brix" : 14.2
       },
-      "expectedStats": {
-        "abv": 6.7,
-        "brix": 13.8
-      },
-      "tags": ["batch", "classic", "tequila", "proven"],
-      "source": "Ford Fry Drink Bible"
+      "id" : "tommys-margarita-frozen",
+      "name" : "Tommy's Frozen Margarita",
+      "servingSize" : 12,
+      "tags" : [
+        "skinny",
+        "agave",
+        "tequila",
+        "citrus"
+      ]
     },
     {
-      "id": "tommys-margarita-frozen",
-      "name": "Tommy's Frozen Margarita",
-      "description": "The 'skinny' margarita with agave instead of triple sec",
-      "category": "margarita",
-      "baseIngredients": [
-        {"ingredient": "Blanco Tequila", "amount": 2.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 1.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Agave Syrup (2:1 diluted)", "amount": 0.5, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 2,
+          "ingredient" : "White Rum",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1,
+          "ingredient" : "Fresh Lime Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 3.25,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 6.25,
+          "ingredient" : "Water",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 22.8,
-        "brixSingleServing": 10.0
+      "category" : "daiquiri",
+      "description" : "Simple rum sour, perfect for freezing",
+      "expectedStats" : {
+        "abv" : 6.4,
+        "brix" : 13.6
       },
-      "batchNotes": "Needs significant water dilution and additional sweetener for frozen. Add water to bring ABV to 10%, then add agave to bring Brix to 13-14.",
-      "machineReady": {
-        "waterRatio": 0.55,
-        "additionalSweetenerRatio": 0.1,
-        "expectedABV": 10.0,
-        "expectedBrix": 13.5
-      },
-      "tags": ["skinny", "agave", "tequila", "citrus"],
-      "servingSize": 10
+      "id" : "frozen-daiquiri",
+      "name" : "Classic Frozen Daiquiri",
+      "servingSize" : 13,
+      "tags" : [
+        "classic",
+        "rum",
+        "citrus",
+        "sour"
+      ]
     },
     {
-      "id": "frozen-daiquiri",
-      "name": "Classic Frozen Daiquiri",
-      "description": "Simple rum sour, perfect for freezing",
-      "category": "daiquiri",
-      "baseIngredients": [
-        {"ingredient": "White Rum", "amount": 2.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 1.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Simple Syrup (1:1 by volume)", "amount": 0.75, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 1.5,
+          "ingredient" : "White Rum",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 0.75,
+          "ingredient" : "Fresh Lime Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 2,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1.5,
+          "ingredient" : "Strawberry Puree",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 3.25,
+          "ingredient" : "Water",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 21.3,
-        "brixSingleServing": 12.0
+      "category" : "daiquiri",
+      "description" : "Fruity frozen daiquiri with fresh strawberry",
+      "expectedStats" : {
+        "abv" : 6.7,
+        "brix" : 13.4
       },
-      "machineReady": {
-        "waterRatio": 0.5,
-        "expectedABV": 10.7,
-        "expectedBrix": 13.0
-      },
-      "tags": ["classic", "rum", "citrus", "sour"],
-      "servingSize": 10
+      "id" : "strawberry-daiquiri",
+      "name" : "Frozen Strawberry Daiquiri",
+      "servingSize" : 9,
+      "tags" : [
+        "fruity",
+        "rum",
+        "strawberry",
+        "popular"
+      ]
     },
     {
-      "id": "strawberry-daiquiri",
-      "name": "Frozen Strawberry Daiquiri",
-      "description": "Fruity frozen daiquiri with fresh strawberry",
-      "category": "daiquiri",
-      "baseIngredients": [
-        {"ingredient": "White Rum", "amount": 1.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 0.75, "unit": "oz", "scalable": true},
-        {"ingredient": "Simple Syrup (1:1 by volume)", "amount": 0.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Strawberry Puree", "amount": 1.5, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 2,
+          "ingredient" : "White Rum",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 2,
+          "ingredient" : "Coconut Cream (Coco Lopez)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 4,
+          "ingredient" : "Pineapple Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 0.5,
+          "ingredient" : "Fresh Lime Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 3.25,
+          "ingredient" : "Water",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 14.1,
-        "brixSingleServing": 11.5
+      "category" : "tropical",
+      "description" : "Tropical coconut and pineapple classic",
+      "expectedStats" : {
+        "abv" : 6.8,
+        "brix" : 14.5
       },
-      "machineReady": {
-        "waterRatio": 0.25,
-        "additionalSweetenerRatio": 0.05,
-        "expectedABV": 9.8,
-        "expectedBrix": 13.2
-      },
-      "tags": ["fruity", "rum", "strawberry", "popular"],
-      "servingSize": 10
+      "id" : "pina-colada",
+      "name" : "Frozen Pina Colada",
+      "servingSize" : 12,
+      "tags" : [
+        "tropical",
+        "rum",
+        "coconut",
+        "pineapple",
+        "creamy"
+      ]
     },
     {
-      "id": "pina-colada",
-      "name": "Frozen Pina Colada",
-      "description": "Tropical coconut and pineapple classic",
-      "category": "tropical",
-      "baseIngredients": [
-        {"ingredient": "White Rum", "amount": 2.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Coconut Cream (Coco Lopez)", "amount": 2.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Pineapple Juice", "amount": 4.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 0.5, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 152,
+          "ingredient" : "Rose Wine",
+          "notes" : "1.5 3-liter boxes",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 30,
+          "ingredient" : "Strawberry Puree",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 24,
+          "ingredient" : "Fresh Lemon Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 33.8,
+          "ingredient" : "Vodka",
+          "notes" : "1 liter",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 64,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 192,
+          "ingredient" : "Water",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 9.4,
-        "brixSingleServing": 17.6
+      "category" : "wine",
+      "description" : "Frozen rosé wine cocktail",
+      "expectedStats" : {
+        "abv" : 6.4,
+        "brix" : 13.2
       },
-      "batchNotes": "Already close to target ABV. May need water to reduce Brix.",
-      "machineReady": {
-        "waterRatio": 0.15,
-        "expectedABV": 8.2,
-        "expectedBrix": 15.3
-      },
-      "tags": ["tropical", "rum", "coconut", "pineapple", "creamy"],
-      "servingSize": 12
+      "id" : "frose",
+      "isBatchRecipe" : true,
+      "name" : "Frosé",
+      "source" : "Ford Fry Drink Bible",
+      "tags" : [
+        "wine",
+        "fruity",
+        "batch",
+        "summer",
+        "proven"
+      ],
+      "yield" : {
+        "servingSizeOz" : 8.5,
+        "servings" : 58,
+        "totalOz" : 496
+      }
     },
     {
-      "id": "frose",
-      "name": "Frosé",
-      "description": "Frozen rosé wine cocktail",
-      "category": "wine",
-      "isBatchRecipe": true,
-      "baseIngredients": [
-        {"ingredient": "Rose Wine", "amount": 152, "unit": "oz", "scalable": true, "notes": "1.5 3-liter boxes"},
-        {"ingredient": "Strawberry Puree", "amount": 30, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lemon Juice", "amount": 24, "unit": "oz", "scalable": true},
-        {"ingredient": "Vodka", "amount": 33.8, "unit": "oz", "scalable": true, "notes": "1 liter"},
-        {"ingredient": "Simple Syrup (1:1 by volume)", "amount": 64, "unit": "oz", "scalable": true},
-        {"ingredient": "Water", "amount": 192, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 1.5,
+          "ingredient" : "Blanco Tequila",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 2,
+          "ingredient" : "Fresh Grapefruit Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 0.5,
+          "ingredient" : "Fresh Lime Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 2,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 3,
+          "ingredient" : "Water",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "yield": {
-        "totalOz": 496,
-        "servings": 58,
-        "servingSizeOz": 8.5
+      "category" : "margarita",
+      "description" : "Tequila and grapefruit Mexican classic",
+      "expectedStats" : {
+        "abv" : 6.7,
+        "brix" : 13.8
       },
-      "expectedStats": {
-        "abv": 6.4,
-        "brix": 13.2
-      },
-      "tags": ["wine", "fruity", "batch", "summer", "proven"],
-      "source": "Ford Fry Drink Bible"
+      "id" : "frozen-paloma",
+      "name" : "Frozen Paloma",
+      "servingSize" : 9,
+      "tags" : [
+        "tequila",
+        "grapefruit",
+        "citrus",
+        "refreshing"
+      ]
     },
     {
-      "id": "frozen-paloma",
-      "name": "Frozen Paloma",
-      "description": "Tequila and grapefruit Mexican classic",
-      "category": "margarita",
-      "baseIngredients": [
-        {"ingredient": "Blanco Tequila", "amount": 1.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Grapefruit Juice", "amount": 2.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 0.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Simple Syrup (1:1 by volume)", "amount": 0.5, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 1.5,
+          "ingredient" : "Vodka",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 0.75,
+          "ingredient" : "Cointreau",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 0.5,
+          "ingredient" : "Fresh Lime Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1,
+          "ingredient" : "Cranberry Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 7.5,
+          "ingredient" : "Water",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 3.25,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 13.3,
-        "brixSingleServing": 11.1
+      "category" : "vodka",
+      "description" : "The iconic pink cocktail, frozen",
+      "expectedStats" : {
+        "abv" : 6.2,
+        "brix" : 14.1
       },
-      "machineReady": {
-        "waterRatio": 0.25,
-        "additionalSweetenerRatio": 0.05,
-        "expectedABV": 9.5,
-        "expectedBrix": 13.0
-      },
-      "tags": ["tequila", "grapefruit", "citrus", "refreshing"],
-      "servingSize": 10
+      "id" : "frozen-cosmo",
+      "name" : "Frozen Cosmopolitan",
+      "servingSize" : 15,
+      "tags" : [
+        "vodka",
+        "cranberry",
+        "citrus",
+        "classic"
+      ]
     },
     {
-      "id": "frozen-cosmo",
-      "name": "Frozen Cosmopolitan",
-      "description": "The iconic pink cocktail, frozen",
-      "category": "vodka",
-      "baseIngredients": [
-        {"ingredient": "Vodka", "amount": 1.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Cointreau", "amount": 0.75, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 0.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Cranberry Juice", "amount": 1.0, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 2,
+          "ingredient" : "White Rum",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1,
+          "ingredient" : "Fresh Lime Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 3.25,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 5.75,
+          "ingredient" : "Water",
+          "notes" : "Represents soda water component",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 23.7,
-        "brixSingleServing": 10.8
+      "category" : "rum",
+      "description" : "Rum, mint, and lime frozen refresher",
+      "expectedStats" : {
+        "abv" : 6.7,
+        "brix" : 14.2
       },
-      "machineReady": {
-        "waterRatio": 0.55,
-        "additionalSweetenerRatio": 0.08,
-        "expectedABV": 10.0,
-        "expectedBrix": 13.5
-      },
-      "tags": ["vodka", "cranberry", "citrus", "classic"],
-      "servingSize": 10
+      "id" : "frozen-mojito",
+      "name" : "Frozen Mojito",
+      "servingSize" : 12,
+      "tags" : [
+        "rum",
+        "mint",
+        "citrus",
+        "refreshing"
+      ]
     },
     {
-      "id": "frozen-mojito",
-      "name": "Frozen Mojito",
-      "description": "Rum, mint, and lime frozen refresher",
-      "category": "rum",
-      "baseIngredients": [
-        {"ingredient": "White Rum", "amount": 2.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 1.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Simple Syrup (1:1 by volume)", "amount": 0.75, "unit": "oz", "scalable": true},
-        {"ingredient": "Water", "amount": 1.0, "unit": "oz", "scalable": true, "notes": "Represents soda water component"}
+      "baseIngredients" : [
+        {
+          "amount" : 1,
+          "ingredient" : "White Rum",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1,
+          "ingredient" : "Dark Rum",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 2,
+          "ingredient" : "Passion Fruit Puree",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1,
+          "ingredient" : "Fresh Orange Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 0.5,
+          "ingredient" : "Fresh Lime Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 2.5,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 4,
+          "ingredient" : "Water",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 16.8,
-        "brixSingleServing": 10.1
+      "category" : "tropical",
+      "description" : "New Orleans classic with rum and passion fruit",
+      "expectedStats" : {
+        "abv" : 6.7,
+        "brix" : 14.1
       },
-      "batchNotes": "Muddle fresh mint separately and add to batch. Strain before adding to machine.",
-      "machineReady": {
-        "waterRatio": 0.35,
-        "additionalSweetenerRatio": 0.08,
-        "expectedABV": 10.0,
-        "expectedBrix": 13.0
-      },
-      "tags": ["rum", "mint", "citrus", "refreshing"],
-      "servingSize": 10
+      "id" : "frozen-hurricane",
+      "name" : "Frozen Hurricane",
+      "servingSize" : 12,
+      "tags" : [
+        "tropical",
+        "rum",
+        "passion fruit",
+        "fruity"
+      ]
     },
     {
-      "id": "frozen-hurricane",
-      "name": "Frozen Hurricane",
-      "description": "New Orleans classic with rum and passion fruit",
-      "category": "tropical",
-      "baseIngredients": [
-        {"ingredient": "White Rum", "amount": 1.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Dark Rum", "amount": 1.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Passion Fruit Puree", "amount": 2.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Orange Juice", "amount": 1.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 0.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Simple Syrup (1:1 by volume)", "amount": 0.5, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 2,
+          "ingredient" : "Aperol",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 3,
+          "ingredient" : "Prosecco",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1,
+          "ingredient" : "Fresh Orange Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1,
+          "ingredient" : "Water",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 0.25,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 13.3,
-        "brixSingleServing": 14.0
+      "category" : "wine",
+      "description" : "Italian aperitivo, frozen style",
+      "expectedStats" : {
+        "abv" : 7.6,
+        "brix" : 14.3
       },
-      "machineReady": {
-        "waterRatio": 0.2,
-        "expectedABV": 9.8,
-        "expectedBrix": 13.5
-      },
-      "tags": ["tropical", "rum", "passion fruit", "fruity"],
-      "servingSize": 11
+      "id" : "frozen-aperol-spritz",
+      "name" : "Frozen Aperol Spritz",
+      "servingSize" : 7,
+      "tags" : [
+        "wine",
+        "aperol",
+        "orange",
+        "light",
+        "italian"
+      ]
     },
     {
-      "id": "frozen-aperol-spritz",
-      "name": "Frozen Aperol Spritz",
-      "description": "Italian aperitivo, frozen style",
-      "category": "wine",
-      "baseIngredients": [
-        {"ingredient": "Aperol", "amount": 2.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Prosecco", "amount": 3.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Orange Juice", "amount": 1.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Water", "amount": 1.0, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 1.5,
+          "ingredient" : "Mezcal",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1,
+          "ingredient" : "Triple Sec (Stirrings)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 0.75,
+          "ingredient" : "Fresh Lime Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 3.25,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 8.25,
+          "ingredient" : "Water",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 8.0,
-        "brixSingleServing": 12.0
+      "category" : "margarita",
+      "description" : "Smoky twist on the classic margarita",
+      "expectedStats" : {
+        "abv" : 6.4,
+        "brix" : 13.8
       },
-      "batchNotes": "Already low ABV. May need additional sweetener for proper texture.",
-      "machineReady": {
-        "additionalSweetenerRatio": 0.05,
-        "expectedABV": 7.6,
-        "expectedBrix": 13.8
-      },
-      "tags": ["wine", "aperol", "orange", "light", "italian"],
-      "servingSize": 10
+      "id" : "mezcal-margarita-frozen",
+      "name" : "Frozen Mezcal Margarita",
+      "servingSize" : 15,
+      "source" : "Ford Fry Drink Bible",
+      "tags" : [
+        "mezcal",
+        "smoky",
+        "citrus",
+        "sour"
+      ]
     },
     {
-      "id": "mezcal-margarita-frozen",
-      "name": "Frozen Mezcal Margarita",
-      "description": "Smoky twist on the classic margarita",
-      "category": "margarita",
-      "baseIngredients": [
-        {"ingredient": "Mezcal", "amount": 1.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Triple Sec (Stirrings)", "amount": 1.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 0.75, "unit": "oz", "scalable": true},
-        {"ingredient": "Simple Syrup (1:1 by volume)", "amount": 0.25, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 1.5,
+          "ingredient" : "Blanco Tequila",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 0.75,
+          "ingredient" : "Triple Sec (Stirrings)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 0.5,
+          "ingredient" : "Fresh Lime Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1.5,
+          "ingredient" : "Mango Puree",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 5.5,
+          "ingredient" : "Water",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 2,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "notes" : "Added for machine-ready balance",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 18.9,
-        "brixSingleServing": 14.2
+      "category" : "margarita",
+      "description" : "Tropical mango twist on the margarita",
+      "expectedStats" : {
+        "abv" : 7,
+        "brix" : 13
       },
-      "machineReady": {
-        "waterRatio": 0.4,
-        "expectedABV": 10.8,
-        "expectedBrix": 13.8
-      },
-      "tags": ["mezcal", "smoky", "citrus", "sour"],
-      "servingSize": 11,
-      "source": "Ford Fry Drink Bible"
+      "id" : "frozen-mango-margarita",
+      "name" : "Frozen Mango Margarita",
+      "servingSize" : 12,
+      "tags" : [
+        "tequila",
+        "mango",
+        "tropical",
+        "fruity"
+      ]
     },
     {
-      "id": "frozen-mango-margarita",
-      "name": "Frozen Mango Margarita",
-      "description": "Tropical mango twist on the margarita",
-      "category": "margarita",
-      "baseIngredients": [
-        {"ingredient": "Blanco Tequila", "amount": 1.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Triple Sec (Stirrings)", "amount": 0.75, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lime Juice", "amount": 0.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Mango Puree", "amount": 1.5, "unit": "oz", "scalable": true}
+      "baseIngredients" : [
+        {
+          "amount" : 1.5,
+          "ingredient" : "Vodka",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 1.5,
+          "ingredient" : "Fresh Lemon Juice",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 2.25,
+          "ingredient" : "Simple Syrup (1:1 by volume)",
+          "scalable" : true,
+          "unit" : "oz"
+        },
+        {
+          "amount" : 3.5,
+          "ingredient" : "Water",
+          "scalable" : true,
+          "unit" : "oz"
+        }
       ],
-      "expectedStats": {
-        "abvSingleServing": 16.5,
-        "brixSingleServing": 14.6
+      "category" : "vodka",
+      "description" : "Simple, refreshing spiked lemonade slush",
+      "expectedStats" : {
+        "abv" : 6.9,
+        "brix" : 14.2
       },
-      "machineReady": {
-        "waterRatio": 0.35,
-        "expectedABV": 10.0,
-        "expectedBrix": 13.5
-      },
-      "tags": ["tequila", "mango", "tropical", "fruity"],
-      "servingSize": 10
-    },
-    {
-      "id": "frozen-lemonade-vodka",
-      "name": "Frozen Vodka Lemonade",
-      "description": "Simple, refreshing spiked lemonade slush",
-      "category": "vodka",
-      "baseIngredients": [
-        {"ingredient": "Vodka", "amount": 1.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Fresh Lemon Juice", "amount": 1.5, "unit": "oz", "scalable": true},
-        {"ingredient": "Simple Syrup (1:1 by volume)", "amount": 1.0, "unit": "oz", "scalable": true},
-        {"ingredient": "Water", "amount": 2.0, "unit": "oz", "scalable": true}
-      ],
-      "expectedStats": {
-        "abvSingleServing": 10.0,
-        "brixSingleServing": 10.0
-      },
-      "machineReady": {
-        "additionalSweetenerRatio": 0.1,
-        "expectedABV": 9.1,
-        "expectedBrix": 13.6
-      },
-      "tags": ["vodka", "lemon", "simple", "refreshing"],
-      "servingSize": 10
+      "id" : "frozen-lemonade-vodka",
+      "name" : "Frozen Vodka Lemonade",
+      "servingSize" : 9,
+      "tags" : [
+        "vodka",
+        "lemon",
+        "simple",
+        "refreshing"
+      ]
     }
-  ],
-  "categories": [
-    {"id": "margarita", "name": "Margaritas", "icon": "🍋"},
-    {"id": "daiquiri", "name": "Daiquiris", "icon": "🍹"},
-    {"id": "tropical", "name": "Tropical", "icon": "🌴"},
-    {"id": "wine", "name": "Wine-Based", "icon": "🍷"},
-    {"id": "vodka", "name": "Vodka Cocktails", "icon": "🍸"},
-    {"id": "rum", "name": "Rum Cocktails", "icon": "🥃"}
   ]
 }

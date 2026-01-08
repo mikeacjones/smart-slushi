@@ -105,6 +105,7 @@ public final class IngredientDatabase: @unchecked Sendable {
     private func parseCategory(_ items: [IngredientItemJSON], category: IngredientCategory) -> [Ingredient] {
         return items.map { item in
             Ingredient(
+                id: Ingredient.deterministicId(for: item.name),
                 name: item.name,
                 category: category,
                 abv: item.abv,
@@ -121,6 +122,7 @@ public final class IngredientDatabase: @unchecked Sendable {
         return items.map { item in
             let category = mapCategory(item.category)
             return Ingredient(
+                id: Ingredient.deterministicId(for: item.name),
                 name: item.name,
                 category: category,
                 abv: item.abv,

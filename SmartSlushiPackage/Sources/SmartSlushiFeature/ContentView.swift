@@ -8,6 +8,7 @@ public struct ContentView: View {
     @State private var templateStore = RecipeTemplateStore.shared
     @State private var recipeStore = RecipeStore()
     @State private var settingsManager = UserSettingsManager.shared
+    @State private var sharedRecipeStore = SharedRecipeStore()
     @State private var showingOnboarding = false
 
     public var body: some View {
@@ -16,6 +17,7 @@ public struct ContentView: View {
             .environment(templateStore)
             .environment(recipeStore)
             .environment(settingsManager)
+            .environment(sharedRecipeStore)
             .onAppear {
                 recipeStore.configure(with: modelContext)
                 // Show onboarding if not completed
