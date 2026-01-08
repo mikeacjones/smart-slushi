@@ -12,7 +12,7 @@ public struct ContentView: View {
     @State private var showingOnboarding = false
 
     public var body: some View {
-        RecipeBuilderView()
+        HomeView()
             .environment(database)
             .environment(templateStore)
             .environment(recipeStore)

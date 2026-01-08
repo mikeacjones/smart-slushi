@@ -85,6 +85,44 @@ public final class SharedRecipeStore {
         }
     }
 
+    /// Whether to show recipes with negative scores (hidden by default)
+    public var showNegativeScoreRecipes = false
+
+    /// Active recipe filters
+    public var filter = RecipeFilter()
+
+    /// Count of hidden recipes (score < 0)
+    public private(set) var hiddenRecipeCount: Int = 0
+
+    /// Filtered recipes based on current settings
+    public var visibleRecipes: [SharedRecipe] {
+        var result = recipes
+
+        // Filter negative scores unless toggled on
+        if !showNegativeScoreRecipes {
+            result = result.filter { $0.score >= 0 }
+        }
+
+        // Apply alcohol category filter
+        if !filter.alcoholCategories.isEmpty {
+            result = result.filter { recipe in
+                recipe.ingredients.contains { ingredient in
+                    guard let category = IngredientCategory(rawValue: ingredient.category) else {
+                        return false
+                    }
+                    return filter.alcoholCategories.contains(category)
+                }
+            }
+        }
+
+        // Apply ABV range filter
+        if let abvRange = filter.abvRange {
+            result = result.filter { abvRange.contains($0.finalABV) }
+        }
+
+        return result
+    }
+
     // Publishing state
     public private(set) var isPublishing = false
     public private(set) var publishError: Error?
@@ -125,6 +163,9 @@ public final class SharedRecipeStore {
             currentCursor = cursor
             hasMoreResults = cursor != nil
 
+            // Calculate hidden recipe count
+            hiddenRecipeCount = fetchedRecipes.filter { $0.score < 0 }.count
+
             // Fetch user's votes for these recipes
             await loadUserVotes(for: fetchedRecipes)
         } catch let cloudKitError as CloudKitError {
@@ -147,6 +188,9 @@ public final class SharedRecipeStore {
             recipes.append(contentsOf: fetchedRecipes)
             currentCursor = newCursor
             hasMoreResults = newCursor != nil
+
+            // Recalculate hidden recipe count for all recipes
+            hiddenRecipeCount = recipes.filter { $0.score < 0 }.count
 
             // Fetch user's votes for new recipes
             await loadUserVotes(for: fetchedRecipes)

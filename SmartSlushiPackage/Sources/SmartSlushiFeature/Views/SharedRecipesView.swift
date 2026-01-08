@@ -12,6 +12,7 @@ public struct SharedRecipesView: View {
 
     @State private var selectedRecipe: SharedRecipe?
     @State private var showingMyRecipes = false
+    @State private var showingFilterSheet = false
 
     /// Callback when a recipe is imported
     let onImportRecipe: (Recipe) -> Void
@@ -27,7 +28,7 @@ public struct SharedRecipesView: View {
                     loadingView
                 } else if let error = sharedStore.error {
                     errorView(error: error)
-                } else if sharedStore.recipes.isEmpty {
+                } else if sharedStore.visibleRecipes.isEmpty {
                     emptyStateView
                 } else {
                     recipeListView
@@ -47,13 +48,44 @@ public struct SharedRecipesView: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 16) {
+                    HStack(spacing: 12) {
                         Button {
                             showingMyRecipes = true
                         } label: {
                             Image(systemName: "person.crop.circle")
                         }
                         .accessibilityLabel("My Published Recipes")
+
+                        // Hidden recipes toggle
+                        if sharedStore.hiddenRecipeCount > 0 {
+                            Button {
+                                sharedStore.showNegativeScoreRecipes.toggle()
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: sharedStore.showNegativeScoreRecipes ? "eye.fill" : "eye.slash")
+                                    Text("\(sharedStore.hiddenRecipeCount)")
+                                        .font(.caption)
+                                }
+                            }
+                            .accessibilityLabel(sharedStore.showNegativeScoreRecipes
+                                ? "Hide low-rated recipes"
+                                : "Show \(sharedStore.hiddenRecipeCount) hidden recipes")
+                        }
+
+                        // Filter button
+                        Button {
+                            showingFilterSheet = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "line.3.horizontal.decrease.circle")
+                                if sharedStore.filter.hasActiveFilters {
+                                    Circle()
+                                        .fill(.blue)
+                                        .frame(width: 8, height: 8)
+                                }
+                            }
+                        }
+                        .accessibilityLabel("Filter recipes")
 
                         sortMenu
                     }
@@ -79,6 +111,9 @@ public struct SharedRecipesView: View {
             .sheet(isPresented: $showingMyRecipes) {
                 MyPublishedRecipesView()
                     .environment(sharedStore)
+            }
+            .sheet(isPresented: $showingFilterSheet) {
+                RecipeFilterSheet(filter: Bindable(sharedStore).filter)
             }
         }
     }
@@ -152,27 +187,38 @@ public struct SharedRecipesView: View {
 
     private var emptyStateView: some View {
         VStack(spacing: 20) {
-            Image(systemName: "globe.americas")
+            Image(systemName: sharedStore.filter.hasActiveFilters ? "magnifyingglass" : "globe.americas")
                 .font(.system(size: 64))
                 .foregroundStyle(.secondary)
 
-            Text("No Recipes Yet")
+            Text(sharedStore.filter.hasActiveFilters ? "No Matching Recipes" : "No Recipes Yet")
                 .font(.title2.weight(.semibold))
 
-            Text("Be the first to share a recipe with the community!")
+            Text(sharedStore.filter.hasActiveFilters
+                ? "Try adjusting your filters to see more recipes."
+                : "Be the first to share a recipe with the community!")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
-            Button {
-                Task {
-                    await sharedStore.refresh()
+            if sharedStore.filter.hasActiveFilters {
+                Button {
+                    sharedStore.filter.reset()
+                } label: {
+                    Label("Clear Filters", systemImage: "xmark.circle")
                 }
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
+                .buttonStyle(.bordered)
+            } else {
+                Button {
+                    Task {
+                        await sharedStore.refresh()
+                    }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -182,7 +228,7 @@ public struct SharedRecipesView: View {
     private var recipeListView: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                ForEach(sharedStore.recipes) { recipe in
+                ForEach(sharedStore.visibleRecipes) { recipe in
                     SharedRecipeRow(
                         recipe: recipe,
                         voteState: sharedStore.voteState(for: recipe),
