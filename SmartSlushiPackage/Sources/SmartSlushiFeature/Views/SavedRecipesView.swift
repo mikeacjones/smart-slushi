@@ -7,11 +7,14 @@ import SwiftUI
 public struct SavedRecipesView: View {
     @Environment(RecipeStore.self) private var recipeStore
     @Environment(IngredientDatabase.self) private var database
+    @Environment(SharedRecipeStore.self) private var sharedRecipeStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var searchText = ""
     @State private var showingDeleteConfirmation = false
     @State private var recipeToDelete: SavedRecipe?
+    @State private var recipeToPublish: SavedRecipe?
+    @State private var showingPublishSheet = false
 
     /// Called when a recipe is selected to load
     let onSelectRecipe: (SavedRecipe) -> Void
@@ -54,6 +57,13 @@ public struct SavedRecipesView: View {
                 }
             } message: {
                 Text("This action cannot be undone.")
+            }
+            .sheet(isPresented: $showingPublishSheet) {
+                if let recipe = recipeToPublish {
+                    PublishRecipeSheet(savedRecipe: recipe)
+                        .environment(sharedRecipeStore)
+                        .environment(database)
+                }
             }
         }
     }
@@ -101,6 +111,14 @@ public struct SavedRecipesView: View {
                     }
                 }
                 .swipeActions(edge: .leading) {
+                    Button {
+                        recipeToPublish = savedRecipe
+                        showingPublishSheet = true
+                    } label: {
+                        Label("Share", systemImage: "globe")
+                    }
+                    .tint(.blue)
+
                     Button {
                         recipeStore.toggleFavorite(savedRecipe)
                     } label: {

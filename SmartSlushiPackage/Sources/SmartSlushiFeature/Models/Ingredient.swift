@@ -155,6 +155,49 @@ extension Ingredient {
     }
 }
 
+// MARK: - Deterministic UUID Generation
+
+extension Ingredient {
+    /// Generate a deterministic UUID from ingredient name
+    /// This ensures the same ingredient always has the same UUID across app launches
+    public static func deterministicId(for name: String) -> UUID {
+        // Use a namespace UUID (DNS namespace from RFC 4122)
+        let namespace = UUID(uuidString: "6ba7b810-9dad-11d1-80b4-00c04fd430c8")!
+
+        // Create a deterministic UUID by hashing the namespace + name
+        var data = withUnsafeBytes(of: namespace.uuid) { Data($0) }
+        data.append(Data(name.utf8))
+
+        // Create SHA-256 hash and use first 16 bytes for UUID
+        var hash = [UInt8](repeating: 0, count: 32)
+        data.withUnsafeBytes { buffer in
+            // Simple hash using DJB2 algorithm, expanded to 16 bytes
+            var hashValue: UInt64 = 5381
+            for byte in buffer {
+                hashValue = ((hashValue << 5) &+ hashValue) &+ UInt64(byte)
+            }
+
+            // Use the hash to seed generation of 16 bytes
+            var seed = hashValue
+            for i in 0..<16 {
+                seed = seed &* 6364136223846793005 &+ 1442695040888963407
+                hash[i] = UInt8(truncatingIfNeeded: seed >> 56)
+            }
+        }
+
+        // Set version (4) and variant (RFC 4122) bits
+        hash[6] = (hash[6] & 0x0F) | 0x40  // Version 4
+        hash[8] = (hash[8] & 0x3F) | 0x80  // Variant RFC 4122
+
+        return UUID(uuid: (
+            hash[0], hash[1], hash[2], hash[3],
+            hash[4], hash[5], hash[6], hash[7],
+            hash[8], hash[9], hash[10], hash[11],
+            hash[12], hash[13], hash[14], hash[15]
+        ))
+    }
+}
+
 // MARK: - JSON Decoding Support
 
 /// Structure for decoding ingredients from the research JSON file
