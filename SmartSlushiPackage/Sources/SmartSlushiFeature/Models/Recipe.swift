@@ -33,38 +33,72 @@ public enum SlushabilityStatus: Equatable, Sendable {
         }
     }
 
-    /// Evaluate slushability based on ABV and Brix values
+    /// Evaluate slushability based on ABV and Brix values using default machine constraints
     public static func evaluate(abv: Double, brix: Double) -> SlushabilityStatus {
+        // Use default Ninja Slushi 72oz constraints
+        evaluate(abv: abv, brix: brix, machine: .ninjaSlushi72oz)
+    }
+
+    /// Evaluate slushability based on ABV and Brix values for a specific machine
+    /// - Parameters:
+    ///   - abv: The alcohol by volume percentage
+    ///   - brix: The sugar content (Brix)
+    ///   - machine: The target slush machine with its constraints
+    /// - Returns: The slushability status for this recipe on the given machine
+    public static func evaluate(abv: Double, brix: Double, machine: SlushiMachine) -> SlushabilityStatus {
         // Check ABV first - too high prevents freezing entirely
-        if abv > 12 {
+        if abv > machine.maxABV {
             return .willNotFreeze
         }
 
-        if abv > 10 {
+        // Warning zone: within 80-100% of max ABV
+        let abvWarningThreshold = machine.maxABV * 0.8
+        let isABVNearLimit = abv > abvWarningThreshold
+
+        if isABVNearLimit {
             // At upper limit, give a warning but check Brix too
-            if brix < 12 {
+            if brix < machine.minBrix + 1 {
                 return .warning("ABV at \(String(format: "%.1f", abv))% is high, and Brix at \(String(format: "%.1f", brix)) is low - may be icy.")
             }
-            if brix > 16 {
+            if brix > machine.maxBrix - 1 {
                 return .warning("ABV at \(String(format: "%.1f", abv))% is high, and Brix at \(String(format: "%.1f", brix)) is high - may be soft.")
             }
-            return .warning("ABV at \(String(format: "%.1f", abv))% is at the upper limit - may be softer than ideal.")
+            return .warning("ABV at \(String(format: "%.1f", abv))% is near the machine limit (\(String(format: "%.0f", machine.maxABV))%) - may be softer than ideal.")
         }
 
         // ABV is acceptable, now check Brix
-        if brix < 11 {
+        if brix < machine.minBrix {
             return .willNotFreeze
         }
 
-        if brix < 13 {
+        // Calculate optimal Brix range (middle of acceptable range)
+        let optimalRange = machine.optimalBrixRange
+        let warningLowThreshold = machine.minBrix + 1
+        let warningHighThreshold = machine.maxBrix - 1
+
+        if brix < warningLowThreshold {
             return .notSweetEnough
         }
 
-        if brix > 17 {
+        if brix > machine.maxBrix {
             return .willNotFreeze
         }
 
-        if brix > 15 {
+        if brix > warningHighThreshold {
+            return .tooSweet
+        }
+
+        // Check if in optimal range
+        if optimalRange.contains(brix) {
+            return .optimal
+        }
+
+        // In acceptable range but not optimal
+        if brix < optimalRange.lowerBound {
+            return .notSweetEnough
+        }
+
+        if brix > optimalRange.upperBound {
             return .tooSweet
         }
 
@@ -123,6 +157,8 @@ public struct RecipeStats: Sendable {
     public let slushabilityStatus: SlushabilityStatus
     public let servings: Int
     public let warnings: [String]
+    /// The machine used for constraint evaluation
+    public let machine: SlushiMachine
 
     public init(
         totalVolumeOz: Double,
@@ -133,7 +169,8 @@ public struct RecipeStats: Sendable {
         freezingPointFahrenheit: Double,
         slushabilityStatus: SlushabilityStatus,
         servings: Int,
-        warnings: [String]
+        warnings: [String],
+        machine: SlushiMachine = .default
     ) {
         self.totalVolumeOz = totalVolumeOz
         self.totalVolumeMl = totalVolumeMl
@@ -144,6 +181,7 @@ public struct RecipeStats: Sendable {
         self.slushabilityStatus = slushabilityStatus
         self.servings = servings
         self.warnings = warnings
+        self.machine = machine
     }
 
     /// Default empty stats
@@ -156,7 +194,8 @@ public struct RecipeStats: Sendable {
         freezingPointFahrenheit: 32,
         slushabilityStatus: .optimal,
         servings: 0,
-        warnings: []
+        warnings: [],
+        machine: .default
     )
 }
 

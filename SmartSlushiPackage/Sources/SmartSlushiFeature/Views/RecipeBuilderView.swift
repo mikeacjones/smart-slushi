@@ -45,6 +45,7 @@ public struct RecipeBuilderView: View {
     @Environment(RecipeStore.self) private var recipeStore
     @Environment(UserSettingsManager.self) private var settingsManager
     @Environment(SharedRecipeStore.self) private var sharedRecipeStore
+    @Environment(MachineStore.self) private var machineStore
 
     @State private var recipe: Recipe
     @State private var showingIngredientPicker = false
@@ -52,6 +53,7 @@ public struct RecipeBuilderView: View {
     @State private var showingSavedRecipes = false
     @State private var showingSettings = false
     @State private var showingPreferences = false
+    @State private var showingMachineSelector = false
     @State private var preferences = DrinkPreferences.balanced
     @State private var isAutoBalancing = false
     @State private var displayUnit: MeasurementUnit = .oz
@@ -82,6 +84,7 @@ public struct RecipeBuilderView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     recipeHeader
+                    machineSection
                     quickStatsBar
                     ingredientsList
                     preferencesSection
@@ -278,17 +281,75 @@ public struct RecipeBuilderView: View {
         recipe.targetUnit = newUnit
     }
 
+    // MARK: - Machine Section
+
+    private var machineSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                withAnimation {
+                    showingMachineSelector.toggle()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: "gearshape.2")
+                        .foregroundStyle(.blue)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Target Machine")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        Text(machineStore.selectedMachine.name)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                    }
+
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("Max \(String(format: "%.0f", machineStore.selectedMachine.maxABV))% ABV")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Text("Brix \(String(format: "%.0f", machineStore.selectedMachine.minBrix))-\(String(format: "%.0f", machineStore.selectedMachine.maxBrix))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Image(systemName: showingMachineSelector ? "chevron.up" : "chevron.down")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+
+            if showingMachineSelector {
+                MachineSelectorView(selectedMachineId: Binding(
+                    get: { machineStore.selectedMachineId },
+                    set: { machineStore.selectMachine($0) }
+                ))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
     // MARK: - Quick Stats Bar
 
     private var quickStatsBar: some View {
         let stats = calculateCurrentStats()
-        let targets = preferences.toOptimizationTargets()
+        let machine = machineStore.selectedMachine
+        // Get targets scaled to the selected machine's capabilities
+        let targets = preferences.toOptimizationTargets(for: machine)
 
         return QuickStatsBar(
             stats: stats,
             displayUnit: displayUnit,
             targetBrixRange: targets.brixRange,
-            targetABVRange: targets.abvRange
+            targetABVRange: targets.abvRange,
+            machine: machine
         )
     }
 
@@ -457,7 +518,8 @@ public struct RecipeBuilderView: View {
         calculator.calculateStats(
             for: recipe.ingredients,
             ingredientLookup: database.lookupFunction(),
-            servingSizeOz: settingsManager.settings.servingSizeOz
+            servingSizeOz: settingsManager.settings.servingSizeOz,
+            machine: machineStore.selectedMachine
         )
     }
 
@@ -493,15 +555,17 @@ public struct RecipeBuilderView: View {
             uniqueKeysWithValues: recipe.ingredients.map { ($0.ingredientId, $0.amount) }
         )
 
-        // Run optimization
-        let targets = preferences.toOptimizationTargets()
+        // Run optimization with machine-aware targets
+        let machine = machineStore.selectedMachine
+        let targets = preferences.toOptimizationTargets(for: machine)
         var balanced = optimizer.autoBalance(
             recipe: recipe,
             targetBrixRange: targets.brixRange,
             targetABVRange: targets.abvRange,
             ingredientLookup: database.lookupFunction(),
             waterIngredientId: water.id,
-            sweetenerIngredientId: simpleSyrup.id
+            sweetenerIngredientId: simpleSyrup.id,
+            machine: machine
         )
 
         // Scale back to original batch size to maintain volume while preserving optimized ratios
@@ -516,7 +580,8 @@ public struct RecipeBuilderView: View {
         // Calculate after stats (now at original batch size with optimized ratios)
         let afterStats = calculator.calculateStats(
             for: balanced.ingredients,
-            ingredientLookup: database.lookupFunction()
+            ingredientLookup: database.lookupFunction(),
+            machine: machine
         )
 
         // Determine ingredient changes
@@ -613,6 +678,7 @@ struct QuickStatsBar: View {
     let displayUnit: MeasurementUnit
     let targetBrixRange: ClosedRange<Double>
     let targetABVRange: ClosedRange<Double>
+    let machine: SlushiMachine
     @Environment(UserSettingsManager.self) private var settingsManager
 
     var body: some View {
@@ -676,24 +742,29 @@ struct QuickStatsBar: View {
     }
 
     private var isABVInTargetRange: Bool {
-        targetABVRange.contains(stats.finalABV) || stats.finalABV < targetABVRange.lowerBound
+        // ABV is in range if within target OR below machine max (lower ABV is always ok)
+        stats.finalABV <= machine.maxABV && (targetABVRange.contains(stats.finalABV) || stats.finalABV < targetABVRange.lowerBound)
     }
 
     private var isBrixInTargetRange: Bool {
-        targetBrixRange.contains(stats.finalBrix)
+        // Brix must be within machine constraints AND target range
+        stats.finalBrix >= machine.minBrix && stats.finalBrix <= machine.maxBrix && targetBrixRange.contains(stats.finalBrix)
     }
 
     private var abvStatus: StatStatus {
-        if stats.finalABV > 12 { return .bad }
-        if stats.finalABV > 10 { return .warning }
-        if isABVInTargetRange { return .good }
+        // Use machine constraints for status
+        if stats.finalABV > machine.maxABV { return .bad }
+        if stats.finalABV > machine.maxABV * 0.9 { return .warning }
+        if stats.finalABV <= machine.maxABV && isABVInTargetRange { return .good }
+        if stats.finalABV <= machine.maxABV { return .neutral }
         return .neutral
     }
 
     private var brixStatus: StatStatus {
-        if stats.finalBrix < 11 || stats.finalBrix > 17 { return .bad }
+        // Use machine constraints for status
+        if stats.finalBrix < machine.minBrix || stats.finalBrix > machine.maxBrix { return .bad }
+        if stats.finalBrix < machine.minBrix + 1 || stats.finalBrix > machine.maxBrix - 1 { return .warning }
         if isBrixInTargetRange { return .good }
-        if stats.finalBrix < 13 || stats.finalBrix > 15 { return .warning }
         return .neutral
     }
 }
@@ -1248,4 +1319,5 @@ struct StatComparisonItem: View {
         .environment(IngredientDatabase.shared)
         .environment(RecipeStore())
         .environment(UserSettingsManager.shared)
+        .environment(MachineStore.shared)
 }

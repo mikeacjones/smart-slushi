@@ -7,10 +7,12 @@ public struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(UserSettingsManager.self) private var settingsManager
+    @Environment(MachineStore.self) private var machineStore
 
     @State private var showingResetConfirmation = false
     @State private var showingDeleteDataConfirmation = false
     @State private var showingAbout = false
+    @State private var showingMachineSettings = false
 
     public var body: some View {
         NavigationStack {
@@ -50,6 +52,10 @@ public struct SettingsView: View {
             }
             .sheet(isPresented: $showingAbout) {
                 AboutView()
+            }
+            .sheet(isPresented: $showingMachineSettings) {
+                MachineSettingsView()
+                    .environment(machineStore)
             }
         }
     }
@@ -138,36 +144,55 @@ public struct SettingsView: View {
 
     private var machineSection: some View {
         Section {
-            Picker("Machine Model", selection: Binding(
-                get: { settingsManager.settings.machineModel },
-                set: { settingsManager.setMachineModel($0) }
-            )) {
-                ForEach(NinjaSlushiModel.allCases, id: \.self) { model in
-                    VStack(alignment: .leading) {
-                        Text(model.displayName)
+            Button {
+                showingMachineSettings = true
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(machineStore.selectedMachine.name)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+
+                        HStack(spacing: 12) {
+                            Text("Max \(String(format: "%.0f", machineStore.selectedMachine.maxABV))% ABV")
+                            Text("Brix \(String(format: "%.0f", machineStore.selectedMachine.minBrix))-\(String(format: "%.0f", machineStore.selectedMachine.maxBrix))")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
-                    .tag(model)
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
             HStack {
                 Text("Working Capacity")
                 Spacer()
-                Text("\(Int(settingsManager.settings.machineModel.workingCapacity)) oz")
+                Text("\(Int(machineStore.selectedMachine.workingCapacityOz)) oz")
                     .foregroundStyle(.secondary)
             }
 
             HStack {
-                Text("Freeze Time")
+                Text("Max ABV")
                 Spacer()
-                let range = settingsManager.settings.machineModel.freezeTimeRange
-                Text("\(range.lowerBound)-\(range.upperBound) min")
+                Text("\(String(format: "%.0f", machineStore.selectedMachine.maxABV))%")
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Text("Brix Range")
+                Spacer()
+                Text("\(String(format: "%.0f", machineStore.selectedMachine.minBrix)) - \(String(format: "%.0f", machineStore.selectedMachine.maxBrix))")
                     .foregroundStyle(.secondary)
             }
         } header: {
-            Text("Ninja Slushi Machine")
+            Text("Target Machine")
         } footer: {
-            Text("Select your Ninja Slushi model for accurate capacity recommendations.")
+            Text("Select your slushi machine for accurate constraint calculations. Custom machines can be created with specific ABV and Brix limits.")
         }
     }
 
@@ -398,4 +423,5 @@ struct ScienceRow: View {
 #Preview {
     SettingsView()
         .environment(UserSettingsManager.shared)
+        .environment(MachineStore.shared)
 }

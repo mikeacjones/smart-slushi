@@ -93,7 +93,7 @@ public final class SlushCalculator: Sendable {
 
     // MARK: - Recipe Stats Calculation
 
-    /// Calculate complete stats for a recipe given its ingredients
+    /// Calculate complete stats for a recipe given its ingredients (using default machine)
     /// - Parameters:
     ///   - recipeIngredients: Recipe ingredients to analyze
     ///   - ingredientLookup: Function to look up ingredient details by ID
@@ -103,6 +103,27 @@ public final class SlushCalculator: Sendable {
         for recipeIngredients: [RecipeIngredient],
         ingredientLookup: (UUID) -> Ingredient?,
         servingSizeOz: Double = defaultServingSizeOz
+    ) -> RecipeStats {
+        calculateStats(
+            for: recipeIngredients,
+            ingredientLookup: ingredientLookup,
+            servingSizeOz: servingSizeOz,
+            machine: .default
+        )
+    }
+
+    /// Calculate complete stats for a recipe given its ingredients and target machine
+    /// - Parameters:
+    ///   - recipeIngredients: Recipe ingredients to analyze
+    ///   - ingredientLookup: Function to look up ingredient details by ID
+    ///   - servingSizeOz: Size of each serving in ounces (defaults to 8oz)
+    ///   - machine: The target slush machine for constraint evaluation
+    /// - Returns: Complete recipe statistics
+    public func calculateStats(
+        for recipeIngredients: [RecipeIngredient],
+        ingredientLookup: (UUID) -> Ingredient?,
+        servingSizeOz: Double = defaultServingSizeOz,
+        machine: SlushiMachine
     ) -> RecipeStats {
         var warnings: [String] = []
 
@@ -130,20 +151,29 @@ public final class SlushCalculator: Sendable {
         let freezingPointC = calculateFreezingPointCelsius(abv: finalABV)
         let freezingPointF = calculateFreezingPointFahrenheit(abv: finalABV)
 
-        // Determine slushability
-        let slushabilityStatus = SlushabilityStatus.evaluate(abv: finalABV, brix: finalBrix)
+        // Determine slushability using machine constraints
+        let slushabilityStatus = SlushabilityStatus.evaluate(abv: finalABV, brix: finalBrix, machine: machine)
 
-        // Add warnings based on values
-        if finalABV > 10 {
-            warnings.append("High ABV (\(String(format: "%.1f", finalABV))%) - may not freeze properly")
+        // Add warnings based on machine constraints
+        let abvStatus = machine.evaluateABV(finalABV)
+        let brixStatus = machine.evaluateBrix(finalBrix)
+
+        switch abvStatus {
+        case .exceeded(let message):
+            warnings.append(message)
+        case .nearLimit(let message):
+            warnings.append(message)
+        default:
+            break
         }
 
-        if finalBrix < 12 {
-            warnings.append("Low sugar (\(String(format: "%.1f", finalBrix)) Brix) - may freeze too hard")
-        }
-
-        if finalBrix > 16 {
-            warnings.append("High sugar (\(String(format: "%.1f", finalBrix)) Brix) - may stay runny")
+        switch brixStatus {
+        case .exceeded(let message):
+            warnings.append(message)
+        case .nearLimit(let message):
+            warnings.append(message)
+        default:
+            break
         }
 
         // Calculate volume in oz
@@ -161,7 +191,8 @@ public final class SlushCalculator: Sendable {
             freezingPointFahrenheit: freezingPointF,
             slushabilityStatus: slushabilityStatus,
             servings: servings,
-            warnings: warnings
+            warnings: warnings,
+            machine: machine
         )
     }
 
@@ -280,24 +311,29 @@ public final class RecipeOptimizer: Sendable {
     /// Prefers adjusting existing ingredients over adding new ones
     /// - Parameters:
     ///   - recipe: The recipe to balance
-    ///   - targetBrixRange: Target Brix range (default: 13-15)
-    ///   - targetABVRange: Target ABV range (default: 5-10)
+    ///   - targetBrixRange: Target Brix range (default: uses machine optimal range)
+    ///   - targetABVRange: Target ABV range (default: uses machine optimal range)
     ///   - ingredientLookup: Function to look up ingredients
     ///   - waterIngredientId: Fallback water ingredient ID if none in recipe
     ///   - sweetenerIngredientId: Fallback sweetener ID if none in recipe
     ///   - sweetenerBrix: Fallback sweetener Brix value
+    ///   - machine: The target slush machine for constraints
     ///   - maxIterations: Maximum balancing iterations
     /// - Returns: A balanced recipe
     public func autoBalance(
         recipe: Recipe,
-        targetBrixRange: ClosedRange<Double> = 13...15,
-        targetABVRange: ClosedRange<Double> = 5...10,
+        targetBrixRange: ClosedRange<Double>? = nil,
+        targetABVRange: ClosedRange<Double>? = nil,
         ingredientLookup: (UUID) -> Ingredient?,
         waterIngredientId: UUID,
         sweetenerIngredientId: UUID,
         sweetenerBrix: Double = 50.0,
+        machine: SlushiMachine = .default,
         maxIterations: Int = 50
     ) -> Recipe {
+        // Use machine's optimal ranges if not specified
+        let effectiveBrixRange = targetBrixRange ?? machine.optimalBrixRange
+        let effectiveABVRange = targetABVRange ?? machine.optimalABVRange
         var workingRecipe = recipe
 
         // Find existing water and sweetener in the recipe (prefer existing ingredients)
@@ -312,23 +348,24 @@ public final class RecipeOptimizer: Sendable {
         for _ in 0..<maxIterations {
             let stats = calculator.calculateStats(
                 for: workingRecipe.ingredients,
-                ingredientLookup: ingredientLookup
+                ingredientLookup: ingredientLookup,
+                machine: machine
             )
 
             // Check if we're within acceptable ranges
-            let abvOK = targetABVRange.contains(stats.finalABV) || stats.finalABV < targetABVRange.lowerBound
-            let brixOK = targetBrixRange.contains(stats.finalBrix)
+            let abvOK = effectiveABVRange.contains(stats.finalABV) || stats.finalABV < effectiveABVRange.lowerBound
+            let brixOK = effectiveBrixRange.contains(stats.finalBrix)
 
             if abvOK && brixOK {
                 break
             }
 
             // Priority 1: ABV too high - must add water
-            if stats.finalABV > targetABVRange.upperBound {
+            if stats.finalABV > effectiveABVRange.upperBound {
                 let waterNeeded = calculator.waterToReduceABV(
                     currentVolume: stats.totalVolumeOz,
                     currentABV: stats.finalABV,
-                    targetABV: targetABVRange.upperBound
+                    targetABV: effectiveABVRange.upperBound
                 )
                 // Add incrementally (max 10% of current volume per iteration)
                 let waterToAdd = min(waterNeeded, stats.totalVolumeOz * 0.1)
@@ -341,11 +378,11 @@ public final class RecipeOptimizer: Sendable {
             }
 
             // Priority 2: Brix too low - add sweetener
-            if stats.finalBrix < targetBrixRange.lowerBound {
+            if stats.finalBrix < effectiveBrixRange.lowerBound {
                 let sweetenerNeeded = calculator.sweetenerToIncreaseBrix(
                     currentVolume: stats.totalVolumeOz,
                     currentBrix: stats.finalBrix,
-                    targetBrix: targetBrixRange.lowerBound,
+                    targetBrix: effectiveBrixRange.lowerBound,
                     sweetenerBrix: effectiveSweetenerBrix
                 )
                 let sweetenerToAdd = min(sweetenerNeeded, stats.totalVolumeOz * 0.1)
@@ -358,11 +395,11 @@ public final class RecipeOptimizer: Sendable {
             }
 
             // Priority 3: Brix too high - add water
-            if stats.finalBrix > targetBrixRange.upperBound {
+            if stats.finalBrix > effectiveBrixRange.upperBound {
                 let waterNeeded = calculator.waterToReduceBrix(
                     currentVolume: stats.totalVolumeOz,
                     currentBrix: stats.finalBrix,
-                    targetBrix: targetBrixRange.upperBound
+                    targetBrix: effectiveBrixRange.upperBound
                 )
                 let waterToAdd = min(waterNeeded, stats.totalVolumeOz * 0.1)
                 workingRecipe = addIngredient(
@@ -418,7 +455,7 @@ public final class RecipeOptimizer: Sendable {
         )
     }
 
-    /// Optimize a recipe based on user preferences
+    /// Optimize a recipe based on user preferences and machine constraints
     /// - Parameters:
     ///   - recipe: The recipe to optimize
     ///   - preferences: User drink preferences
@@ -426,6 +463,7 @@ public final class RecipeOptimizer: Sendable {
     ///   - waterIngredientId: ID of water ingredient
     ///   - sweetenerIngredientId: ID of sweetener ingredient
     ///   - sweetenerBrix: Brix of the sweetener
+    ///   - machine: The target slush machine for constraints
     /// - Returns: An optimized recipe
     public func optimizeRecipe(
         _ recipe: Recipe,
@@ -433,19 +471,48 @@ public final class RecipeOptimizer: Sendable {
         ingredientLookup: (UUID) -> Ingredient?,
         waterIngredientId: UUID,
         sweetenerIngredientId: UUID,
-        sweetenerBrix: Double = 50.0
+        sweetenerBrix: Double = 50.0,
+        machine: SlushiMachine = .default
     ) -> Recipe {
         let targets = preferences.toOptimizationTargets()
 
+        // Clamp targets to machine constraints
+        let clampedBrixRange = clampToMachineConstraints(
+            range: targets.brixRange,
+            machineMin: machine.minBrix,
+            machineMax: machine.maxBrix
+        )
+        let clampedABVRange = clampToMachineConstraints(
+            range: targets.abvRange,
+            machineMin: 0,
+            machineMax: machine.maxABV
+        )
+
         return autoBalance(
             recipe: recipe,
-            targetBrixRange: targets.brixRange,
-            targetABVRange: targets.abvRange,
+            targetBrixRange: clampedBrixRange,
+            targetABVRange: clampedABVRange,
             ingredientLookup: ingredientLookup,
             waterIngredientId: waterIngredientId,
             sweetenerIngredientId: sweetenerIngredientId,
-            sweetenerBrix: sweetenerBrix
+            sweetenerBrix: sweetenerBrix,
+            machine: machine
         )
+    }
+
+    /// Clamp a target range to machine constraints
+    private func clampToMachineConstraints(
+        range: ClosedRange<Double>,
+        machineMin: Double,
+        machineMax: Double
+    ) -> ClosedRange<Double> {
+        let clampedLow = max(range.lowerBound, machineMin)
+        let clampedHigh = min(range.upperBound, machineMax)
+        // Ensure valid range
+        if clampedLow > clampedHigh {
+            return clampedLow...clampedLow
+        }
+        return clampedLow...clampedHigh
     }
 
     // MARK: - Private Helpers

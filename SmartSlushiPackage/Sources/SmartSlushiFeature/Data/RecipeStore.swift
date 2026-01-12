@@ -264,7 +264,8 @@ public extension ModelContainer {
     static func smartSlushiContainer() throws -> ModelContainer {
         let schema = Schema([
             SavedRecipe.self,
-            UserPreferencesStore.self
+            UserPreferencesStore.self,
+            SavedMachine.self
         ])
 
         let configuration = ModelConfiguration(
@@ -284,7 +285,8 @@ public extension ModelContainer {
     static func smartSlushiLocalContainer() throws -> ModelContainer {
         let schema = Schema([
             SavedRecipe.self,
-            UserPreferencesStore.self
+            UserPreferencesStore.self,
+            SavedMachine.self
         ])
 
         let configuration = ModelConfiguration(
@@ -303,7 +305,8 @@ public extension ModelContainer {
     static func smartSlushiPreviewContainer() throws -> ModelContainer {
         let schema = Schema([
             SavedRecipe.self,
-            UserPreferencesStore.self
+            UserPreferencesStore.self,
+            SavedMachine.self
         ])
 
         let configuration = ModelConfiguration(

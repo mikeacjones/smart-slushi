@@ -97,21 +97,42 @@ public struct OptimizationTargets: Sendable {
 }
 
 extension DrinkPreferences {
-    /// Convert preferences to optimization targets
+    /// Convert preferences to optimization targets (legacy - uses default machine)
     public func toOptimizationTargets() -> OptimizationTargets {
-        // Sweetness: 0.0 = tart (Brix 12-13), 1.0 = sweet (Brix 15-16)
-        let brixBase = 12.0 + (sweetnessLevel * 3.0)
+        toOptimizationTargets(for: .default)
+    }
 
-        // Thickness: adjusts Brix slightly (+/- 0.5)
-        let thicknessAdjust = (slushThickness - 0.5) * 1.0
+    /// Convert preferences to optimization targets scaled to machine capabilities
+    /// - Parameter machine: The target slush machine
+    /// - Returns: Optimization targets scaled to the machine's constraints
+    public func toOptimizationTargets(for machine: SlushiMachine) -> OptimizationTargets {
+        // Scale Brix within machine's acceptable range
+        let brixRange = machine.maxBrix - machine.minBrix
 
-        let brixLow = brixBase + thicknessAdjust
-        let brixHigh = brixLow + 1.0
+        // Sweetness shifts within the machine's range
+        // Add some padding from the extremes for safety
+        let brixPadding = brixRange * 0.1
+        let effectiveMin = machine.minBrix + brixPadding
+        let effectiveMax = machine.maxBrix - brixPadding
+        let effectiveRange = effectiveMax - effectiveMin
 
-        // Alcohol: 0.0 = light (5-6%), 1.0 = strong (9-10%)
-        let abvBase = 5.0 + (alcoholStrength * 4.0)
-        let abvLow = abvBase
-        let abvHigh = abvBase + 1.0
+        let brixCenter = effectiveMin + (sweetnessLevel * effectiveRange)
+
+        // Thickness adjusts the range width (+/- based on preference)
+        let rangeWidth = 1.0 + (slushThickness * 1.0)  // 1-2 Brix range
+        let brixLow = max(machine.minBrix, brixCenter - rangeWidth / 2)
+        let brixHigh = min(machine.maxBrix, brixCenter + rangeWidth / 2)
+
+        // Scale ABV within machine's range
+        // 0.0 = light (20-40% of max), 1.0 = strong (70-90% of max)
+        let abvMin = machine.maxABV * 0.2
+        let abvMax = machine.maxABV * 0.85
+        let abvRange = abvMax - abvMin
+
+        let abvCenter = abvMin + (alcoholStrength * abvRange)
+        let abvWidth = machine.maxABV * 0.1  // 10% of max as range width
+        let abvLow = max(0, abvCenter - abvWidth / 2)
+        let abvHigh = min(machine.maxABV, abvCenter + abvWidth / 2)
 
         return OptimizationTargets(
             brixRange: brixLow...brixHigh,
