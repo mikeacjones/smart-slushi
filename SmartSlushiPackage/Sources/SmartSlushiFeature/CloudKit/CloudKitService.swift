@@ -142,7 +142,7 @@ public actor CloudKitService {
         }
 
         let ckQuery = CKQuery(recordType: CloudKitRecordType.sharedRecipe, predicate: predicate)
-        ckQuery.sortDescriptors = [query.sortDescriptor]
+        ckQuery.sortDescriptors = query.sortDescriptors
 
         do {
             let (matchResults, queryCursor) = try await publicDB.records(

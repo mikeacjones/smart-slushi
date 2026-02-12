@@ -23,7 +23,7 @@ public final class UserSettingsManager: Sendable {
 
     /// Update the default batch size
     public func setDefaultBatchSize(_ size: Double) {
-        settings.defaultBatchSize = size
+        settings.defaultBatchSize = max(1, size)
     }
 
     /// Update the preferred measurement unit

@@ -202,7 +202,7 @@ public struct SharedRecipeDetailView: View {
             ], spacing: 12) {
                 statCard(title: "ABV", value: String(format: "%.1f%%", recipe.finalABV), icon: "drop.fill", color: .blue)
                 statCard(title: "Brix", value: String(format: "%.1f", recipe.finalBrix), icon: "cube.fill", color: .orange)
-                statCard(title: "Batch Size", value: "\(Int(recipe.targetBatchSize)) \(recipe.targetUnit.abbreviation)", icon: "flask", color: .purple)
+                statCard(title: "Batch Size", value: formattedBatchSize, icon: "flask", color: .purple)
                 statCard(title: "Ingredients", value: "\(recipe.ingredients.count)", icon: "list.bullet", color: .green)
             }
         }
@@ -225,6 +225,18 @@ public struct SharedRecipeDetailView: View {
         .padding()
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var formattedBatchSize: String {
+        let convertedBatchSize = MeasurementUnit.oz.convert(recipe.targetBatchSize, to: recipe.targetUnit)
+        switch recipe.targetUnit {
+        case .ml:
+            return String(format: "%.0f %@", convertedBatchSize, recipe.targetUnit.abbreviation)
+        case .cup:
+            return String(format: "%.1f %@", convertedBatchSize, recipe.targetUnit.abbreviation)
+        default:
+            return String(format: "%.0f %@", convertedBatchSize, recipe.targetUnit.abbreviation)
+        }
     }
 
     // MARK: - Ingredients Section

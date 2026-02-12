@@ -55,17 +55,27 @@ public struct SharedRecipeQuery: Sendable {
         self.limit = limit
     }
 
-    /// Get the CloudKit sort descriptor for this query
-    var sortDescriptor: NSSortDescriptor {
+    /// Get the CloudKit sort descriptors for this query
+    var sortDescriptors: [NSSortDescriptor] {
         switch sortOrder {
         case .mostRecent:
-            return NSSortDescriptor(key: "publishedAt", ascending: false)
+            return [
+                NSSortDescriptor(key: "publishedAt", ascending: false)
+            ]
         case .mostPopular:
             // Sort by score (upvotes - downvotes) descending
-            // CloudKit doesn't support computed fields, so we use upvoteCount as primary
-            return NSSortDescriptor(key: "upvoteCount", ascending: false)
+            // CloudKit doesn't support computed fields, so approximate by:
+            // 1) More upvotes, 2) fewer downvotes, 3) newer recency.
+            return [
+                NSSortDescriptor(key: "upvoteCount", ascending: false),
+                NSSortDescriptor(key: "downvoteCount", ascending: true),
+                NSSortDescriptor(key: "publishedAt", ascending: false)
+            ]
         case .topRated:
-            return NSSortDescriptor(key: "upvoteCount", ascending: false)
+            return [
+                NSSortDescriptor(key: "upvoteCount", ascending: false),
+                NSSortDescriptor(key: "publishedAt", ascending: false)
+            ]
         }
     }
 }

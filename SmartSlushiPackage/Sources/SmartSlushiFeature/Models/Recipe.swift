@@ -99,6 +99,36 @@ public struct RecipeIngredient: Identifiable, Codable, Hashable, Sendable {
         self.isLocked = isLocked
     }
 
+    enum CodingKeys: String, CodingKey {
+        case id
+        case ingredientId
+        case amount
+        case unit
+        case isLocked
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        ingredientId = try container.decode(UUID.self, forKey: .ingredientId)
+        amount = try container.decode(Double.self, forKey: .amount)
+
+        let unitRaw = try container.decodeIfPresent(String.self, forKey: .unit) ?? MeasurementUnit.oz.rawValue
+        unit = MeasurementUnit(rawValue: unitRaw) ?? .oz
+
+        isLocked = try container.decodeIfPresent(Bool.self, forKey: .isLocked) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(ingredientId, forKey: .ingredientId)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(unit.rawValue, forKey: .unit)
+        try container.encode(isLocked, forKey: .isLocked)
+    }
+
     /// Get the volume in milliliters
     public var volumeInMl: Double {
         unit.convert(amount, to: .ml)
@@ -255,11 +285,27 @@ public struct RecipeTemplate: Identifiable, Codable, Sendable {
 
     /// Create a new Recipe instance from this template
     public func createRecipe(targetBatchSize: Double = 72) -> Recipe {
+        let baseVolumeOz = baseIngredients.reduce(0.0) { partialResult, ingredient in
+            partialResult + ingredient.volumeInOz
+        }
+
+        let scaledIngredients: [RecipeIngredient]
+        if baseVolumeOz > 0, targetBatchSize > 0 {
+            let scaleFactor = targetBatchSize / baseVolumeOz
+            scaledIngredients = baseIngredients.map { ingredient in
+                var scaled = ingredient
+                scaled.amount = ingredient.amount * scaleFactor
+                return scaled
+            }
+        } else {
+            scaledIngredients = baseIngredients
+        }
+
         Recipe(
             name: name,
             description: description,
             baseRecipeId: id,
-            ingredients: baseIngredients,
+            ingredients: scaledIngredients,
             targetBatchSize: targetBatchSize
         )
     }

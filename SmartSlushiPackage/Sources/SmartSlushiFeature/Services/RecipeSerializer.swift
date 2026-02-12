@@ -120,7 +120,7 @@ public final class RecipeSerializer: Sendable {
         }
 
         lines.append("")
-        lines.append("Batch Size: \(formatAmount(recipe.targetBatchSize, unit: recipe.targetUnit))")
+        lines.append("Batch Size: \(formatBatchSize(recipe))")
         lines.append("")
 
         // Ingredients
@@ -172,7 +172,7 @@ public final class RecipeSerializer: Sendable {
 
         lines.append("SHOPPING LIST: \(recipe.name)")
         lines.append("===================================")
-        lines.append("Batch Size: \(formatAmount(recipe.targetBatchSize, unit: recipe.targetUnit))")
+        lines.append("Batch Size: \(formatBatchSize(recipe))")
         lines.append("")
 
         // Group ingredients by category
@@ -230,6 +230,9 @@ public final class RecipeSerializer: Sendable {
         decoder.dateDecodingStrategy = .iso8601
 
         let exportable = try decoder.decode(ExportableRecipe.self, from: data)
+        guard exportable.version == ExportableRecipe.currentVersion else {
+            throw RecipeSerializerError.versionMismatch(exportable.version)
+        }
         return try createRecipe(from: exportable, ingredientDatabase: ingredientDatabase)
     }
 
@@ -326,6 +329,11 @@ public final class RecipeSerializer: Sendable {
                 return String(format: "%.2f %@", amount, unit.abbreviation)
             }
         }
+    }
+
+    private func formatBatchSize(_ recipe: Recipe) -> String {
+        let converted = MeasurementUnit.oz.convert(recipe.targetBatchSize, to: recipe.targetUnit)
+        return formatAmount(converted, unit: recipe.targetUnit)
     }
 }
 

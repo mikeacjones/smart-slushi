@@ -7,6 +7,7 @@ public struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(UserSettingsManager.self) private var settingsManager
+    @Environment(RecipeStore.self) private var recipeStore
 
     @State private var showingResetConfirmation = false
     @State private var showingDeleteDataConfirmation = false
@@ -243,6 +244,7 @@ public struct SettingsView: View {
         do {
             try modelContext.delete(model: SavedRecipe.self)
             try modelContext.save()
+            recipeStore.configure(with: modelContext)
         } catch {
             print("Failed to delete saved recipes: \(error)")
         }
@@ -398,4 +400,5 @@ struct ScienceRow: View {
 #Preview {
     SettingsView()
         .environment(UserSettingsManager.shared)
+        .environment(RecipeStore())
 }
