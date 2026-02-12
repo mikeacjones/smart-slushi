@@ -249,6 +249,18 @@ public final class IngredientDatabase: @unchecked Sendable {
         }
     }
 
+    /// Replace recent ingredient IDs from persisted storage
+    public func setRecentIngredientIds(_ ids: [UUID]) {
+        var uniqueValidIds: [UUID] = []
+        for id in ids where ingredient(for: id) != nil && !uniqueValidIds.contains(id) {
+            uniqueValidIds.append(id)
+            if uniqueValidIds.count >= maxRecentIngredients {
+                break
+            }
+        }
+        recentIngredientIds = uniqueValidIds
+    }
+
     /// Clear recent ingredients list
     public func clearRecentIngredients() {
         recentIngredientIds.removeAll()

@@ -35,6 +35,7 @@ public struct RecipeOutputView: View {
     @Environment(\.dismiss) private var dismiss
 
     let recipe: Recipe
+    let onImportRecipe: ((Recipe) -> Void)?
 
     @State private var selectedTab: OutputTab = .shoppingList
     @State private var shoppingItems: [IngredientCategory: [ShoppingItem]] = [:]
@@ -42,12 +43,14 @@ public struct RecipeOutputView: View {
     @State private var shareContent: String = ""
     @State private var showingExportOptions = false
     @State private var showingCopyConfirmation = false
+    @State private var confirmationMessage = "Recipe copied to clipboard"
 
     private let calculator = SlushCalculator()
     private let serializer = RecipeSerializer()
 
-    public init(recipe: Recipe) {
+    public init(recipe: Recipe, onImportRecipe: ((Recipe) -> Void)? = nil) {
         self.recipe = recipe
+        self.onImportRecipe = onImportRecipe
     }
 
     public var body: some View {
@@ -94,7 +97,7 @@ public struct RecipeOutputView: View {
             .alert("Copied!", isPresented: $showingCopyConfirmation) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text("Recipe copied to clipboard")
+                Text(confirmationMessage)
             }
         }
     }
@@ -585,6 +588,7 @@ public struct RecipeOutputView: View {
             ingredientLookup: database.lookupFunction()
         )
         UIPasteboard.general.string = text
+        confirmationMessage = "Recipe copied to clipboard"
         showingCopyConfirmation = true
 
         let generator = UINotificationFeedbackGenerator()
@@ -597,6 +601,7 @@ public struct RecipeOutputView: View {
             ingredientLookup: database.lookupFunction()
         )
         UIPasteboard.general.string = text
+        confirmationMessage = "Recipe copied to clipboard"
         showingCopyConfirmation = true
 
         let generator = UINotificationFeedbackGenerator()
@@ -618,6 +623,7 @@ public struct RecipeOutputView: View {
                 ingredientLookup: database.lookupFunction()
             )
             UIPasteboard.general.string = json
+            confirmationMessage = "Recipe copied to clipboard"
             showingCopyConfirmation = true
 
             let generator = UINotificationFeedbackGenerator()
@@ -631,10 +637,13 @@ public struct RecipeOutputView: View {
         guard let clipboardContent = UIPasteboard.general.string else { return }
 
         do {
-            _ = try serializer.importFromJSON(clipboardContent, ingredientDatabase: database)
-            // Note: In a full implementation, you would pass this back to the parent view
+            let importedRecipe = try serializer.importFromJSON(clipboardContent, ingredientDatabase: database)
+            onImportRecipe?(importedRecipe)
+            confirmationMessage = "Recipe imported successfully"
+            showingCopyConfirmation = true
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
+            dismiss()
         } catch {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.error)
@@ -666,8 +675,8 @@ public struct RecipeOutputView: View {
     }
 
     private func formatBatchSize() -> String {
-        let volume = recipe.targetBatchSize
         let unit = recipe.targetUnit
+        let volume = MeasurementUnit.oz.convert(recipe.targetBatchSize, to: unit)
 
         switch unit {
         case .ml:

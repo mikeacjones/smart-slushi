@@ -17,9 +17,9 @@ public struct SavedRecipesView: View {
     @State private var showingPublishSheet = false
 
     /// Called when a recipe is selected to load
-    let onSelectRecipe: (SavedRecipe) -> Void
+    let onSelectRecipe: (Recipe) -> Void
 
-    public init(onSelectRecipe: @escaping (SavedRecipe) -> Void) {
+    public init(onSelectRecipe: @escaping (Recipe) -> Void) {
         self.onSelectRecipe = onSelectRecipe
     }
 
@@ -162,7 +162,7 @@ public struct SavedRecipesView: View {
     // MARK: - Actions
 
     private func selectRecipe(_ recipe: SavedRecipe) {
-        onSelectRecipe(recipe)
+        onSelectRecipe(recipe.toRecipe())
         dismiss()
     }
 

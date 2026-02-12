@@ -36,6 +36,117 @@ struct MeasurementUnitTests {
     }
 }
 
+// MARK: - Recipe Template Tests
+
+@Suite("Recipe Template Tests")
+struct RecipeTemplateTests {
+    @Test("Template createRecipe scales ingredients to target batch")
+    func templateCreateRecipeScalesIngredients() {
+        let ingredientA = RecipeIngredient(ingredientId: UUID(), amount: 1.0, unit: .oz)
+        let ingredientB = RecipeIngredient(ingredientId: UUID(), amount: 3.0, unit: .oz)
+
+        let template = RecipeTemplate(
+            name: "Scaling Test",
+            category: "test",
+            baseIngredients: [ingredientA, ingredientB],
+            baseABV: 0,
+            baseBrix: 0
+        )
+
+        let recipe = template.createRecipe(targetBatchSize: 20)
+        let totalVolume = recipe.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
+
+        #expect(abs(totalVolume - 20.0) < 0.001)
+        #expect(abs(recipe.ingredients[0].amount - 5.0) < 0.001)
+        #expect(abs(recipe.ingredients[1].amount - 15.0) < 0.001)
+    }
+}
+
+// MARK: - Shared Recipe Query Tests
+
+@Suite("Shared Recipe Query Tests")
+struct SharedRecipeQueryTests {
+    @Test("Most Popular sort prioritizes upvotes then fewer downvotes")
+    func mostPopularSortDescriptors() {
+        let query = SharedRecipeQuery(sortOrder: .mostPopular)
+        let descriptors = query.sortDescriptors
+
+        #expect(descriptors.count == 3)
+        #expect(descriptors[0].key == "upvoteCount")
+        #expect(descriptors[0].ascending == false)
+        #expect(descriptors[1].key == "downvoteCount")
+        #expect(descriptors[1].ascending == true)
+    }
+
+    @Test("Top Rated sort prioritizes upvotes")
+    func topRatedSortDescriptors() {
+        let query = SharedRecipeQuery(sortOrder: .topRated)
+        let descriptors = query.sortDescriptors
+
+        #expect(descriptors.count == 2)
+        #expect(descriptors[0].key == "upvoteCount")
+        #expect(descriptors[0].ascending == false)
+    }
+}
+
+// MARK: - Recipe Serializer Tests
+
+@Suite("Recipe Serializer Tests")
+struct RecipeSerializerTests {
+    @Test("Import rejects unsupported export version")
+    func importRejectsUnsupportedVersion() {
+        let serializer = RecipeSerializer()
+        let json = """
+        {
+          "version": "999.0",
+          "exportedAt": "2026-02-11T00:00:00Z",
+          "recipe": {
+            "id": "\(UUID().uuidString)",
+            "name": "Unsupported Version Recipe",
+            "description": null,
+            "targetBatchSize": 72,
+            "targetUnit": "oz",
+            "ingredients": [],
+            "createdAt": "2026-02-11T00:00:00Z",
+            "modifiedAt": "2026-02-11T00:00:00Z"
+          }
+        }
+        """
+
+        do {
+            _ = try serializer.importFromJSON(json, ingredientDatabase: IngredientDatabase.shared)
+            Issue.record("Expected versionMismatch error")
+        } catch let error as RecipeSerializerError {
+            if case .versionMismatch(let version) = error {
+                #expect(version == "999.0")
+            } else {
+                Issue.record("Expected versionMismatch, got \(error)")
+            }
+        } catch {
+            Issue.record("Expected RecipeSerializerError, got \(error)")
+        }
+    }
+
+    @Test("Text export formats batch size in target unit")
+    func textExportFormatsBatchSizeInTargetUnit() {
+        let serializer = RecipeSerializer()
+        let recipe = Recipe(
+            name: "Unit Test Recipe",
+            ingredients: [],
+            targetBatchSize: 72,
+            targetUnit: .ml
+        )
+
+        let output = serializer.exportToText(
+            recipe,
+            ingredientLookup: { _ in nil },
+            includeStats: false
+        )
+
+        #expect(output.contains("Batch Size: 2129 ml"))
+    }
+}
+
 // MARK: - SlushCalculator Tests
 
 @Suite("SlushCalculator Tests")
@@ -368,6 +479,46 @@ struct RecipeIngredientTests {
             unit: .ml
         )
         #expect(abs(ingredient.volumeInOz - 1.0) < 0.001)
+    }
+
+    @Test("Decode legacy ingredient without isLocked")
+    func decodeLegacyIngredientWithoutIsLocked() throws {
+        let ingredientId = UUID()
+        let json = """
+        [
+          {
+            "id": "\(UUID())",
+            "ingredientId": "\(ingredientId.uuidString)",
+            "amount": 2.5,
+            "unit": "oz"
+          }
+        ]
+        """
+
+        let decoded = try JSONDecoder().decode([RecipeIngredient].self, from: Data(json.utf8))
+        #expect(decoded.count == 1)
+        #expect(decoded[0].ingredientId == ingredientId)
+        #expect(decoded[0].isLocked == false)
+    }
+
+    @Test("Decode ingredient with unknown unit defaults to oz")
+    func decodeIngredientUnknownUnitDefaultsToOz() throws {
+        let json = """
+        [
+          {
+            "id": "\(UUID())",
+            "ingredientId": "\(UUID().uuidString)",
+            "amount": 1.0,
+            "unit": "ounces",
+            "isLocked": true
+          }
+        ]
+        """
+
+        let decoded = try JSONDecoder().decode([RecipeIngredient].self, from: Data(json.utf8))
+        #expect(decoded.count == 1)
+        #expect(decoded[0].unit == .oz)
+        #expect(decoded[0].isLocked == true)
     }
 }
 

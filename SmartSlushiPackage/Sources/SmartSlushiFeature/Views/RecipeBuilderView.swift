@@ -63,17 +63,32 @@ public struct RecipeBuilderView: View {
     @State private var showingBatchScaling = false
     @State private var showingCommunityRecipes = false
     @State private var showingPublishSheet = false
+    @State private var pendingLoadedRecipe: Recipe?
+    @State private var hasAppliedInitialDefaults = false
 
     private let calculator = SlushCalculator()
     private let optimizer = RecipeOptimizer()
+    private let shouldApplySettingsDefaults: Bool
 
     /// Units available for batch size display
     private static let volumeDisplayUnits: [MeasurementUnit] = [.oz, .cup, .ml]
 
     public init(recipe: Recipe? = nil) {
         let initialRecipe = recipe ?? Recipe(name: "New Recipe")
+        let initialDisplayUnit = initialRecipe.targetUnit
+        let initialDisplayValue = MeasurementUnit.oz.convert(initialRecipe.targetBatchSize, to: initialDisplayUnit)
+        let initialBatchInput: String
+        if initialDisplayUnit == .ml {
+            initialBatchInput = String(format: "%.0f", initialDisplayValue)
+        } else if initialDisplayUnit == .cup {
+            initialBatchInput = String(format: "%.1f", initialDisplayValue)
+        } else {
+            initialBatchInput = String(format: "%.0f", initialDisplayValue)
+        }
+
+        self.shouldApplySettingsDefaults = recipe == nil
         _recipe = State(initialValue: initialRecipe)
-        _batchSizeInput = State(initialValue: String(format: "%.0f", initialRecipe.targetBatchSize))
+        _batchSizeInput = State(initialValue: initialBatchInput)
         _displayUnit = State(initialValue: initialRecipe.targetUnit)
     }
 
@@ -150,9 +165,9 @@ public struct RecipeBuilderView: View {
                     loadTemplate(template)
                 }
             }
-            .sheet(isPresented: $showingSavedRecipes) {
-                SavedRecipesView { savedRecipe in
-                    loadSavedRecipe(savedRecipe)
+            .sheet(isPresented: $showingSavedRecipes, onDismiss: applyPendingLoadedRecipe) {
+                SavedRecipesView { loadedRecipe in
+                    pendingLoadedRecipe = loadedRecipe
                 }
             }
             .sheet(isPresented: $showingOptimizationResult) {
@@ -168,7 +183,13 @@ public struct RecipeBuilderView: View {
                 Text("Your recipe has been saved successfully.")
             }
             .sheet(isPresented: $showingRecipeOutput) {
-                RecipeOutputView(recipe: recipe)
+                RecipeOutputView(recipe: recipe) { importedRecipe in
+                    withAnimation {
+                        recipe = importedRecipe
+                        displayUnit = recipe.targetUnit
+                        batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
+                    }
+                }
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
@@ -203,6 +224,9 @@ public struct RecipeBuilderView: View {
                 PublishRecipeSheet(recipe: recipe)
                     .environment(sharedRecipeStore)
                     .environment(database)
+            }
+            .onAppear {
+                applyUserDefaultsIfNeeded()
             }
         }
     }
@@ -453,6 +477,21 @@ public struct RecipeBuilderView: View {
 
     // MARK: - Actions
 
+    private func applyUserDefaultsIfNeeded() {
+        guard shouldApplySettingsDefaults, !hasAppliedInitialDefaults else { return }
+        hasAppliedInitialDefaults = true
+
+        preferences = settingsManager.settings.drinkPreferences
+
+        let preferredUnit = settingsManager.settings.preferredUnit
+        let defaultBatchSize = max(1, settingsManager.settings.defaultBatchSize)
+
+        recipe.targetBatchSize = preferredUnit.convert(defaultBatchSize, to: .oz)
+        recipe.targetUnit = preferredUnit
+        displayUnit = preferredUnit
+        batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: preferredUnit)
+    }
+
     private func calculateCurrentStats() -> RecipeStats {
         calculator.calculateStats(
             for: recipe.ingredients,
@@ -470,6 +509,7 @@ public struct RecipeBuilderView: View {
         )
         recipe.ingredients.append(recipeIngredient)
         recipe.modifiedAt = Date()
+        recipeStore.markIngredientAsRecentlyUsed(ingredient.id)
         database.markAsRecentlyUsed(ingredient.id)
     }
 
@@ -578,9 +618,15 @@ public struct RecipeBuilderView: View {
         }
     }
 
-    private func loadSavedRecipe(_ savedRecipe: SavedRecipe) {
+    private func applyPendingLoadedRecipe() {
+        guard let loadedRecipe = pendingLoadedRecipe else { return }
+        pendingLoadedRecipe = nil
+        loadSavedRecipe(loadedRecipe)
+    }
+
+    private func loadSavedRecipe(_ loadedRecipe: Recipe) {
         withAnimation {
-            recipe = savedRecipe.toRecipe()
+            recipe = loadedRecipe
             displayUnit = recipe.targetUnit
             batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
         }

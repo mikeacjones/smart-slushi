@@ -20,6 +20,9 @@ public struct ContentView: View {
             .environment(sharedRecipeStore)
             .onAppear {
                 recipeStore.configure(with: modelContext)
+                if let recentIngredientIds = recipeStore.userPreferences?.recentIngredientIds {
+                    database.setRecentIngredientIds(recentIngredientIds)
+                }
                 // Show onboarding if not completed
                 if !settingsManager.settings.hasCompletedOnboarding {
                     showingOnboarding = true
