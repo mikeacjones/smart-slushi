@@ -993,7 +993,8 @@ struct RealWorldRecipeTests {
             RecipeIngredient(ingredientId: pureAgave.id, amount: 4, unit: .oz),
             RecipeIngredient(ingredientId: limeJuice.id, amount: 8, unit: .oz)
         ]
-        // Total 40 oz; locked tequila 8 oz. Scale to 80 oz → unlocked should double to 64, locked stays 8.
+        // Total 40 oz; locked tequila 8 oz. Scale to 80 oz → unlocked gets 72 oz
+        // (scale factor 72/32 = 2.25); locked stays 8.
 
         let scaled = calculator.scaleRecipe(
             recipe,
@@ -1006,7 +1007,7 @@ struct RealWorldRecipeTests {
         #expect(tequila?.isLocked == true)
 
         let waterAmount = scaled.ingredients.first { $0.ingredientId == water.id }?.amount ?? 0
-        #expect(abs(waterAmount - 40.0) < 0.01)
+        #expect(abs(waterAmount - 45.0) < 0.01)
 
         let total = scaled.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
         #expect(abs(total - 80.0) < 0.01)
