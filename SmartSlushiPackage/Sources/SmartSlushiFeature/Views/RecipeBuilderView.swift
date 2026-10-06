@@ -554,6 +554,7 @@ public struct RecipeBuilderView: View {
         )
         recipe.ingredients.append(recipeIngredient)
         recipe.modifiedAt = Date()
+        syncTargetBatchSizeFromIngredients()
         recipeStore.markIngredientAsRecentlyUsed(ingredient.id)
         database.markAsRecentlyUsed(ingredient.id)
     }
@@ -561,6 +562,15 @@ public struct RecipeBuilderView: View {
     private func removeIngredient(_ ingredient: RecipeIngredient) {
         recipe.ingredients.removeAll { $0.id == ingredient.id }
         recipe.modifiedAt = Date()
+        syncTargetBatchSizeFromIngredients()
+    }
+
+    /// Keep metadata batch size aligned with actual ingredient volume
+    private func syncTargetBatchSizeFromIngredients() {
+        let total = recipe.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
+        guard total > 0 else { return }
+        recipe.targetBatchSize = total
+        batchSizeInput = formatBatchSize(total, for: displayUnit)
     }
 
     private func autoBalance() {

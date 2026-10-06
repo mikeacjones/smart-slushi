@@ -305,7 +305,7 @@ public struct RecipeTemplate: Identifiable, Codable, Sendable {
             scaledIngredients = baseIngredients
         }
 
-        Recipe(
+        return Recipe(
             name: name,
             description: description,
             baseRecipeId: id,

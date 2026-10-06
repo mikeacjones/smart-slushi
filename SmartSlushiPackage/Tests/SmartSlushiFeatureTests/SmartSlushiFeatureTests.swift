@@ -1014,9 +1014,17 @@ struct TemplateScienceAccuracyTests {
             )
 
             #expect(stats.finalABV <= 10.0, "\(template.name) ABV \(stats.finalABV) exceeds 10%")
-            #expect(stats.finalBrix >= 13.0, "\(template.name) Brix \(stats.finalBrix) below 13")
-            #expect(stats.finalBrix <= 15.0, "\(template.name) Brix \(stats.finalBrix) above 15")
+            let optimal = calculator.optimalBrixRange(forABV: stats.finalABV)
+            #expect(stats.finalBrix >= optimal.lowerBound - 0.05, "\(template.name) Brix \(stats.finalBrix) below ABV-aware \(optimal.lowerBound)")
+            #expect(stats.finalBrix <= optimal.upperBound + 0.05, "\(template.name) Brix \(stats.finalBrix) above ABV-aware \(optimal.upperBound)")
             #expect(abs(stats.totalVolumeOz - 72.0) < 0.5, "\(template.name) should scale to ~72 oz")
+
+            let status = SlushabilityStatus.evaluate(
+                abv: stats.finalABV,
+                brix: stats.finalBrix,
+                optimalBrixRange: optimal
+            )
+            #expect(status == .optimal, "\(template.name) should be optimal, got \(status)")
 
             // Stored expected stats should match live calculation within rounding
             #expect(abs(template.baseABV - stats.finalABV) < 0.3, "\(template.name) claimed ABV mismatch")
