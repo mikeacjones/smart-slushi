@@ -351,6 +351,8 @@ public struct RecipeBuilderView: View {
 
     /// Write the batch size field without triggering ingredient scaling
     private func writeBatchSizeInput(_ value: String) {
+        // If the string is unchanged, onChange will not fire — do not leave suppress stuck
+        guard batchSizeInput != value else { return }
         suppressBatchSizeInputHandler = true
         batchSizeInput = value
     }

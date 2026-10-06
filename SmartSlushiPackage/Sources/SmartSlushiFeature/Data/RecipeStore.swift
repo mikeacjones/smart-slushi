@@ -236,12 +236,18 @@ public final class RecipeStore {
                     }
                     preferred.recentIngredientIds = Array(mergedRecent.prefix(10))
 
-                    // Prefer non-default drink / batch / serving values from the loser when winner is default
+                    // Prefer non-default drink / batch / serving / unit / machine from loser when winner is default
                     if preferred.defaultBatchSize == 64, duplicate.defaultBatchSize != 64 {
                         preferred.defaultBatchSize = duplicate.defaultBatchSize
                     }
                     if preferred.servingSizeOz == 8, duplicate.servingSizeOz != 8 {
                         preferred.servingSizeOz = duplicate.servingSizeOz
+                    }
+                    if preferred.defaultUnitRaw == "oz", duplicate.defaultUnitRaw != "oz" {
+                        preferred.defaultUnitRaw = duplicate.defaultUnitRaw
+                    }
+                    if preferred.machineCapacity == 72, duplicate.machineCapacity != 72 {
+                        preferred.machineCapacity = duplicate.machineCapacity
                     }
                     if preferred.sweetnessLevel == 0.5, duplicate.sweetnessLevel != 0.5 {
                         preferred.sweetnessLevel = duplicate.sweetnessLevel
