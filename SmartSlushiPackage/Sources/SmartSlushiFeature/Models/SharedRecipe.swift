@@ -38,19 +38,35 @@ public struct ExportedIngredient: Codable, Hashable, Sendable {
         self.unit = recipeIngredient.unit.rawValue
     }
 
-    /// Try to match this exported ingredient to a database ingredient and create a RecipeIngredient
-    public func toRecipeIngredient(using database: IngredientDatabase) -> RecipeIngredient? {
-        // Try to find matching ingredient by name (case-insensitive)
-        guard let matchingIngredient = database.search(name).first(where: {
-            $0.name.lowercased() == name.lowercased()
-        }) else {
-            return nil
-        }
-
+    /// Try to match this exported ingredient to a database ingredient and create a RecipeIngredient.
+    /// Missing ingredients are recreated as custom entries so community imports stay complete.
+    public func toRecipeIngredient(using database: IngredientDatabase) -> RecipeIngredient {
         let ingredientUnit = MeasurementUnit(rawValue: unit) ?? .oz
 
+        if let matchingIngredient = database.search(name).first(where: {
+            $0.name.lowercased() == name.lowercased()
+        }) {
+            return RecipeIngredient(
+                ingredientId: matchingIngredient.id,
+                amount: amount,
+                unit: ingredientUnit
+            )
+        }
+
+        let resolvedCategory = IngredientCategory(rawValue: self.category) ?? .misc
+        let custom = Ingredient(
+            name: name,
+            category: resolvedCategory,
+            abv: abv,
+            brix: brix,
+            defaultUnit: ingredientUnit,
+            isCustom: true,
+            notes: "Imported from community recipe"
+        )
+        database.addCustomIngredient(custom)
+
         return RecipeIngredient(
-            ingredientId: matchingIngredient.id,
+            ingredientId: custom.id,
             amount: amount,
             unit: ingredientUnit
         )
@@ -159,11 +175,22 @@ public struct SharedRecipe: Identifiable, Sendable {
         ingredientLookup: (UUID) -> Ingredient?,
         stats: RecipeStats
     ) -> SharedRecipe {
-        let exportedIngredients = savedRecipe.ingredients.compactMap { recipeIngredient -> ExportedIngredient? in
-            guard let ingredient = ingredientLookup(recipeIngredient.ingredientId) else {
-                return nil
+        let exportedIngredients = savedRecipe.ingredients.map { recipeIngredient -> ExportedIngredient in
+            if let ingredient = ingredientLookup(recipeIngredient.ingredientId) {
+                return ExportedIngredient(from: recipeIngredient, ingredient: ingredient)
             }
-            return ExportedIngredient(from: recipeIngredient, ingredient: ingredient)
+            // Prefer embedded custom snapshots when the live lookup misses
+            if let custom = savedRecipe.customIngredients.first(where: { $0.id == recipeIngredient.ingredientId }) {
+                return ExportedIngredient(from: recipeIngredient, ingredient: custom)
+            }
+            return ExportedIngredient(
+                name: "Unknown Ingredient",
+                category: IngredientCategory.misc.rawValue,
+                abv: 0,
+                brix: 0,
+                amount: recipeIngredient.amount,
+                unit: recipeIngredient.unit.rawValue
+            )
         }
 
         return SharedRecipe(
@@ -190,11 +217,19 @@ public struct SharedRecipe: Identifiable, Sendable {
         ingredientLookup: (UUID) -> Ingredient?,
         stats: RecipeStats
     ) -> SharedRecipe {
-        let exportedIngredients = recipe.ingredients.compactMap { recipeIngredient -> ExportedIngredient? in
-            guard let ingredient = ingredientLookup(recipeIngredient.ingredientId) else {
-                return nil
+        let exportedIngredients = recipe.ingredients.map { recipeIngredient -> ExportedIngredient in
+            if let ingredient = ingredientLookup(recipeIngredient.ingredientId) {
+                return ExportedIngredient(from: recipeIngredient, ingredient: ingredient)
             }
-            return ExportedIngredient(from: recipeIngredient, ingredient: ingredient)
+            // Preserve amount/unit even when the lookup fails so shared recipes stay complete
+            return ExportedIngredient(
+                name: "Unknown Ingredient",
+                category: IngredientCategory.misc.rawValue,
+                abv: 0,
+                brix: 0,
+                amount: recipeIngredient.amount,
+                unit: recipeIngredient.unit.rawValue
+            )
         }
 
         return SharedRecipe(
@@ -215,7 +250,7 @@ public struct SharedRecipe: Identifiable, Sendable {
 
     /// Convert to a local Recipe for editing/importing
     public func toRecipe(using database: IngredientDatabase) -> Recipe {
-        let recipeIngredients = ingredients.compactMap { exported in
+        let recipeIngredients = ingredients.map { exported in
             exported.toRecipeIngredient(using: database)
         }
 

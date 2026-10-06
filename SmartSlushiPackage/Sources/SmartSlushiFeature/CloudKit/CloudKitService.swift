@@ -142,7 +142,7 @@ public actor CloudKitService {
         }
 
         let ckQuery = CKQuery(recordType: CloudKitRecordType.sharedRecipe, predicate: predicate)
-        ckQuery.sortDescriptors = [query.sortDescriptor]
+        ckQuery.sortDescriptors = query.sortDescriptors
 
         do {
             let (matchResults, queryCursor) = try await publicDB.records(
@@ -372,22 +372,35 @@ public actor CloudKitService {
         }
     }
 
-    /// Update a recipe's vote count
+    /// Update a recipe's vote count with conflict retry (fetch → mutate → save is racy under concurrency)
     private func updateRecipeVoteCount(recipeId: String, isUpvote: Bool, increment: Bool) async throws {
         let recordID = CKRecord.ID(recordName: recipeId)
+        let maxAttempts = 3
 
-        do {
-            let record = try await publicDB.record(for: recordID)
+        for attempt in 1...maxAttempts {
+            do {
+                let record = try await publicDB.record(for: recordID)
 
-            let countKey = isUpvote ? "upvoteCount" : "downvoteCount"
-            let currentCount = record[countKey] as? Int ?? 0
-            let newCount = increment ? currentCount + 1 : max(0, currentCount - 1)
-            record[countKey] = newCount
+                let countKey = isUpvote ? "upvoteCount" : "downvoteCount"
+                let currentCount = record[countKey] as? Int ?? 0
+                let newCount = increment ? currentCount + 1 : max(0, currentCount - 1)
+                record[countKey] = newCount
 
-            _ = try await publicDB.save(record)
-        } catch {
-            // Log but don't fail the vote operation
-            print("Failed to update vote count: \(error)")
+                _ = try await publicDB.save(record)
+                return
+            } catch let error as CKError where error.code == .serverRecordChanged || error.code == .requestRateLimited {
+                if attempt == maxAttempts {
+                    print("Failed to update vote count after \(maxAttempts) attempts: \(error)")
+                    return
+                }
+                // Brief backoff before retrying against the latest server record
+                try? await Task.sleep(for: .milliseconds(50 * attempt))
+                continue
+            } catch {
+                // Log but don't fail the vote operation
+                print("Failed to update vote count: \(error)")
+                return
+            }
         }
     }
 

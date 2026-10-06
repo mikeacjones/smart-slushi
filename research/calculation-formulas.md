@@ -87,17 +87,16 @@ func calculateFinalBrix(ingredients: [(volume: Double, brix: Double)]) -> Double
 
 ### Freezing Point Calculation
 
-Simple linear approximation (accurate for 0-25% ABV):
+Simple linear approximation (accurate for 0-25% ABV), kept consistent across °C and °F:
 
 ```
 Freezing Point (°C) = -0.4 × ABV%
 Freezing Point (°F) = 32 - (0.72 × ABV%)
+                    = (°C × 9/5) + 32
 ```
 
-More accurate polynomial (0-25% ABV):
-```
-Freezing Point (°F) = (0.0075275 × ABV + 0.054922) × ABV + 31.947
-```
+> Do not use the obsolete polynomial `(0.0075275 × ABV + 0.054922) × ABV + 31.947` —
+> it increases freezing point with ABV and contradicts measured ethanol-water data.
 
 #### Swift Implementation
 ```swift
@@ -106,13 +105,8 @@ func calculateFreezingPointCelsius(abv: Double) -> Double {
 }
 
 func calculateFreezingPointFahrenheit(abv: Double) -> Double {
-    // More accurate polynomial
-    return (0.0075275 * abv + 0.054922) * abv + 31.947
-}
-
-// Alternative simple formula
-func calculateFreezingPointFahrenheitSimple(abv: Double) -> Double {
-    return 32.0 - (0.72 * abv)
+    let celsius = calculateFreezingPointCelsius(abv: abv)
+    return celsius * 9.0 / 5.0 + 32.0
 }
 ```
 
@@ -314,29 +308,34 @@ func scaleRecipe(
 
 ## User Preference Mapping
 
-Map preference sliders (0.0-1.0) to target ranges:
+Map preference sliders (0.0-1.0) to target ranges, then **clamp Brix into the ABV-aware science window** from `optimalBrixRange(forABV:)`:
 
 ```swift
 struct DrinkPreferences {
-    var sweetness: Double      // 0.0 = tart, 1.0 = sweet
-    var thickness: Double      // 0.0 = thin/sippable, 1.0 = thick
-    var alcoholStrength: Double // 0.0 = light, 1.0 = strong
+    var sweetnessLevel: Double   // 0.0 = tart, 1.0 = sweet
+    var slushThickness: Double   // 0.0 = thin/sippable, 1.0 = thick
+    var alcoholStrength: Double  // 0.0 = light, 1.0 = strong
 }
 
-func mapPreferencesToTargets(_ prefs: DrinkPreferences) -> (brixRange: ClosedRange<Double>, abvRange: ClosedRange<Double>) {
-    // Sweetness: 0.0 -> Brix 12-13, 1.0 -> Brix 15-16
-    let brixBase = 12.0 + (prefs.sweetness * 3.0)
-
-    // Thickness: adjusts Brix slightly (+/- 0.5)
-    let thicknessAdjust = (prefs.thickness - 0.5) * 1.0
-
-    let brixLow = brixBase + thicknessAdjust
-    let brixHigh = brixLow + 1.0
-
+func toOptimizationTargets(_ prefs: DrinkPreferences) -> (brixRange: ClosedRange<Double>, abvRange: ClosedRange<Double>) {
     // Alcohol: 0.0 -> ABV 5-6%, 1.0 -> ABV 9-10%
     let abvBase = 5.0 + (prefs.alcoholStrength * 4.0)
     let abvLow = abvBase
     let abvHigh = abvBase + 1.0
+    let abvMid = (abvLow + abvHigh) / 2.0
+
+    // Science-backed Brix window for the target ABV (see Optimal Brix Range Based on ABV)
+    let scienceBrix = optimalBrixRange(forABV: abvMid)
+    let windowWidth = scienceBrix.upperBound - scienceBrix.lowerBound
+
+    // Sweetness / thickness nudge *within* the science window, then clamp
+    let sweetnessShift = (prefs.sweetnessLevel - 0.5) * windowWidth
+    let thicknessAdjust = (prefs.slushThickness - 0.5) * (windowWidth * 0.5)
+
+    var brixLow = scienceBrix.lowerBound + sweetnessShift + thicknessAdjust
+    var brixHigh = brixLow + max(1.0, windowWidth * 0.5)
+    brixLow = min(max(brixLow, scienceBrix.lowerBound), scienceBrix.upperBound - 0.5)
+    brixHigh = min(max(brixHigh, brixLow + 0.5), scienceBrix.upperBound)
 
     return (
         brixRange: brixLow...brixHigh,
@@ -345,50 +344,40 @@ func mapPreferencesToTargets(_ prefs: DrinkPreferences) -> (brixRange: ClosedRan
 }
 ```
 
+> **Note:** An older preference map (`12 + sweetness×3 ± thickness`) is obsolete. Always clamp preference Brix into `optimalBrixRange` so taste sliders cannot request unworkable sugar levels for the chosen ABV.
+
 ## Slushability Status
 
 ```swift
 enum SlushabilityStatus {
     case optimal
+    case tooSweet
+    case notSweetEnough
+    case tooAlcoholic
+    case willNotFreeze
     case warning(String)
-    case willNotFreeze(String)
 
-    static func evaluate(abv: Double, brix: Double) -> SlushabilityStatus {
-        // Check ABV first
+    static func evaluate(
+        abv: Double,
+        brix: Double,
+        optimalBrixRange: ClosedRange<Double> = 13...15
+    ) -> Self {
         if abv > 12 {
-            return .willNotFreeze("ABV too high (\(String(format: "%.1f", abv))%). Maximum is ~10-12% for home machines.")
+            return .willNotFreeze
         }
 
         if abv > 10 {
-            let msg = "ABV is \(String(format: "%.1f", abv))% - at the upper limit. May be slushy but could be soft."
-            // Continue to check Brix
-            if brix < 12 {
-                return .warning("\(msg) Also, Brix is low (\(String(format: "%.1f", brix))) - may over-freeze in spots.")
-            }
-            if brix > 16 {
-                return .warning("\(msg) Also, Brix is high (\(String(format: "%.1f", brix))) - may be too runny.")
-            }
-            return .warning(msg)
+            return .tooAlcoholic
         }
 
-        // ABV is good, check Brix
-        if brix < 11 {
-            return .willNotFreeze("Brix too low (\(String(format: "%.1f", brix))). Will freeze into ice block. Add sweetener.")
-        }
+        let hardLow = max(11.0, optimalBrixRange.lowerBound - 2.0)
+        let hardHigh = min(18.0, optimalBrixRange.upperBound + 2.0)
 
-        if brix < 13 {
-            return .warning("Brix is \(String(format: "%.1f", brix)) - slightly low. May be icier than ideal.")
-        }
+        if brix < hardLow { return .willNotFreeze }
+        if brix < optimalBrixRange.lowerBound { return .notSweetEnough }
+        if brix > hardHigh { return .willNotFreeze }
+        if brix > optimalBrixRange.upperBound { return .tooSweet }
 
-        if brix > 17 {
-            return .willNotFreeze("Brix too high (\(String(format: "%.1f", brix))). Will stay runny. Add water.")
-        }
-
-        if brix > 15 {
-            return .warning("Brix is \(String(format: "%.1f", brix)) - slightly high. May be softer than ideal.")
-        }
-
-        // Both in range
         return .optimal
     }
 }

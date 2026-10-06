@@ -57,12 +57,15 @@ Ethanol has a much lower freezing point (-114°C) than water (0°C). When mixed:
 ### Freezing Point Formula
 ```
 Freezing Point (°C) ≈ -0.4 × ABV%
+Freezing Point (°F) ≈ 32 − (0.72 × ABV%)   // equivalent: °C × 9/5 + 32
 ```
 
-More precise polynomial (valid 0-25% ABV):
-```
-Freezing Point (°F) = (0.0075275 × ABV + 0.054922) × ABV + 31.947
-```
+These stay consistent with each other for the 0–25% ABV range used in slush recipes.
+The linear model matches measured ethanol-water data well through ~25% ABV; above that,
+real freezing points drop faster (e.g. 40% ABV is colder than the linear estimate).
+
+> Note: An older polynomial form that appeared in early drafts (`(0.0075275 × ABV + 0.054922) × ABV + 31.947`)
+> incorrectly *raises* freezing point with ABV and must not be used.
 
 ## Ninja Slushi Machine Specifications
 

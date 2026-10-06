@@ -18,6 +18,10 @@ public final class RecipeStore {
     /// User preferences from persistent storage
     public private(set) var userPreferences: UserPreferencesStore?
 
+    /// True when `userPreferences` was just inserted with factory defaults this session
+    /// (caller should seed from local UserSettings instead of merging CloudKit → device).
+    public private(set) var preferencesWereJustCreated = false
+
     /// Sort order for recipes
     public enum SortOrder: String, CaseIterable, Sendable {
         case dateCreated = "Date Created"
@@ -83,14 +87,24 @@ public final class RecipeStore {
     }
 
     /// Save a recipe to the database
-    public func save(_ recipe: Recipe, isFavorite: Bool = false) {
+    /// - Parameters:
+    ///   - recipe: Recipe to persist
+    ///   - isFavorite: Favorite flag for new saves
+    ///   - ingredientLookup: Optional lookup used to snapshot custom ingredients for CloudKit sync
+    public func save(
+        _ recipe: Recipe,
+        isFavorite: Bool = false,
+        ingredientLookup: ((UUID) -> Ingredient?)? = nil
+    ) {
         guard let context = modelContext else { return }
+
+        let customs = Self.customIngredients(in: recipe, lookup: ingredientLookup)
 
         // Check if recipe already exists
         if let existing = savedRecipes.first(where: { $0.id == recipe.id }) {
-            existing.update(from: recipe)
+            existing.update(from: recipe, customIngredients: customs)
         } else {
-            let savedRecipe = SavedRecipe(from: recipe, isFavorite: isFavorite)
+            let savedRecipe = SavedRecipe(from: recipe, isFavorite: isFavorite, customIngredients: customs)
             context.insert(savedRecipe)
             savedRecipes.append(savedRecipe)
         }
@@ -101,6 +115,23 @@ public final class RecipeStore {
         } catch {
             print("Error saving recipe: \(error)")
         }
+    }
+
+    private static func customIngredients(
+        in recipe: Recipe,
+        lookup: ((UUID) -> Ingredient?)?
+    ) -> [Ingredient] {
+        guard let lookup else { return [] }
+        var seen = Set<UUID>()
+        var customs: [Ingredient] = []
+        for item in recipe.ingredients {
+            guard !seen.contains(item.ingredientId),
+                  let ingredient = lookup(item.ingredientId),
+                  ingredient.isCustom else { continue }
+            seen.insert(item.ingredientId)
+            customs.append(ingredient)
+        }
+        return customs
     }
 
     /// Delete a saved recipe
@@ -175,24 +206,22 @@ public final class RecipeStore {
 
         do {
             let results = try context.fetch(descriptor)
+            preferencesWereJustCreated = false
 
             if results.isEmpty {
-                // Create default preferences
+                // Create default preferences — ContentView should seed from UserDefaults
                 let defaults = UserPreferencesStore()
                 context.insert(defaults)
                 try context.save()
                 userPreferences = defaults
+                preferencesWereJustCreated = true
             } else if results.count == 1 {
                 // Normal case - single preferences record
                 userPreferences = results.first
             } else {
                 // CloudKit sync may have created duplicates - merge and keep the most customized one
-                // Keep the one that appears most customized (non-default values)
                 let sorted = results.sorted { prefs1, prefs2 in
-                    // Prioritize preferences with more recent ingredients or non-default settings
-                    let score1 = prefs1.recentIngredientIds.count + (prefs1.machineCapacity != 72 ? 10 : 0)
-                    let score2 = prefs2.recentIngredientIds.count + (prefs2.machineCapacity != 72 ? 10 : 0)
-                    return score1 > score2
+                    Self.customizationScore(prefs1) > Self.customizationScore(prefs2)
                 }
 
                 let preferred = sorted[0]
@@ -207,6 +236,29 @@ public final class RecipeStore {
                     }
                     preferred.recentIngredientIds = Array(mergedRecent.prefix(10))
 
+                    // Prefer non-default drink / batch / serving / unit / machine from loser when winner is default
+                    if preferred.defaultBatchSize == 64, duplicate.defaultBatchSize != 64 {
+                        preferred.defaultBatchSize = duplicate.defaultBatchSize
+                    }
+                    if preferred.servingSizeOz == 8, duplicate.servingSizeOz != 8 {
+                        preferred.servingSizeOz = duplicate.servingSizeOz
+                    }
+                    if preferred.defaultUnitRaw == "oz", duplicate.defaultUnitRaw != "oz" {
+                        preferred.defaultUnitRaw = duplicate.defaultUnitRaw
+                    }
+                    if preferred.machineCapacity == 72, duplicate.machineCapacity != 72 {
+                        preferred.machineCapacity = duplicate.machineCapacity
+                    }
+                    if preferred.sweetnessLevel == 0.5, duplicate.sweetnessLevel != 0.5 {
+                        preferred.sweetnessLevel = duplicate.sweetnessLevel
+                    }
+                    if preferred.slushThickness == 0.5, duplicate.slushThickness != 0.5 {
+                        preferred.slushThickness = duplicate.slushThickness
+                    }
+                    if preferred.alcoholStrength == 0.5, duplicate.alcoholStrength != 0.5 {
+                        preferred.alcoholStrength = duplicate.alcoholStrength
+                    }
+
                     context.delete(duplicate)
                 }
 
@@ -215,6 +267,19 @@ public final class RecipeStore {
         } catch {
             print("Error loading user preferences: \(error)")
         }
+    }
+
+    /// Higher score = more customized / less likely to be a factory default
+    private static func customizationScore(_ prefs: UserPreferencesStore) -> Int {
+        var score = prefs.recentIngredientIds.count
+        if prefs.machineCapacity != 72 { score += 10 }
+        if prefs.defaultBatchSize != 64 { score += 5 }
+        if prefs.servingSizeOz != 8 { score += 5 }
+        if prefs.defaultUnitRaw != "oz" { score += 3 }
+        if prefs.sweetnessLevel != 0.5 { score += 3 }
+        if prefs.slushThickness != 0.5 { score += 3 }
+        if prefs.alcoholStrength != 0.5 { score += 3 }
+        return score
     }
 
     /// Save user preferences
@@ -232,6 +297,27 @@ public final class RecipeStore {
     public func updateDrinkPreferences(_ preferences: DrinkPreferences) {
         userPreferences?.update(from: preferences)
         savePreferences()
+    }
+
+    /// Sync app settings into the CloudKit-backed preferences store
+    public func syncFromUserSettings(_ settings: UserSettings) {
+        guard let prefs = userPreferences else { return }
+        prefs.defaultBatchSize = settings.defaultBatchSize
+        prefs.defaultUnit = settings.preferredUnit
+        prefs.machineCapacity = settings.machineModel.totalCapacity
+        prefs.servingSizeOz = settings.servingSizeOz
+        prefs.update(from: settings.drinkPreferences)
+        savePreferences()
+    }
+
+    /// Apply CloudKit-synced preference fields onto local UserSettings (device-local fields preserved)
+    public func mergeCloudPreferences(into settings: inout UserSettings) {
+        guard let prefs = userPreferences else { return }
+        settings.defaultBatchSize = prefs.defaultBatchSize
+        settings.preferredUnit = prefs.defaultUnit
+        settings.machineModel = prefs.machineCapacity >= 88 ? .large88oz : .standard72oz
+        settings.servingSizeOz = prefs.servingSizeOz > 0 ? prefs.servingSizeOz : settings.servingSizeOz
+        settings.drinkPreferences = prefs.toDrinkPreferences()
     }
 
     /// Add ingredient to recent list

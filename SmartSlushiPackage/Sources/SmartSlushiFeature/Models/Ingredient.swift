@@ -168,7 +168,7 @@ extension Ingredient {
         var data = withUnsafeBytes(of: namespace.uuid) { Data($0) }
         data.append(Data(name.utf8))
 
-        // Create SHA-256 hash and use first 16 bytes for UUID
+        // Deterministic hash (DJB2 + LCG) — not cryptographic; stable IDs for built-in ingredients
         var hash = [UInt8](repeating: 0, count: 32)
         data.withUnsafeBytes { buffer in
             // Simple hash using DJB2 algorithm, expanded to 16 bytes

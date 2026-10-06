@@ -339,14 +339,22 @@ public final class SharedRecipeStore {
     private func submitVote(for recipe: SharedRecipe, isUpvote: Bool) async {
         // Optimistically update UI
         let previousVote = userVotes[recipe.id]
-        updateLocalVoteCounts(for: recipe, newIsUpvote: isUpvote, previousVote: previousVote)
+        applyLocalVoteDelta(
+            for: recipe,
+            removing: previousVote.map(\.isUpvote),
+            adding: isUpvote
+        )
 
         do {
             let vote = try await cloudKitService.submitVote(recipeId: recipe.id, isUpvote: isUpvote)
             userVotes[recipe.id] = vote
         } catch {
-            // Revert on failure
-            revertLocalVoteCounts(for: recipe, previousVote: previousVote)
+            // Undo optimistic update
+            applyLocalVoteDelta(
+                for: recipe,
+                removing: isUpvote,
+                adding: previousVote.map(\.isUpvote)
+            )
             print("Failed to submit vote: \(error)")
         }
     }
@@ -357,7 +365,11 @@ public final class SharedRecipeStore {
 
         // Optimistically update UI
         let previousVote = existingVote
-        revertLocalVoteCounts(for: recipe, previousVote: previousVote)
+        applyLocalVoteDelta(
+            for: recipe,
+            removing: previousVote.isUpvote,
+            adding: nil
+        )
         userVotes[recipe.id] = nil
 
         do {
@@ -365,7 +377,11 @@ public final class SharedRecipeStore {
         } catch {
             // Restore on failure
             userVotes[recipe.id] = previousVote
-            updateLocalVoteCounts(for: recipe, newIsUpvote: previousVote.isUpvote, previousVote: nil)
+            applyLocalVoteDelta(
+                for: recipe,
+                removing: nil,
+                adding: previousVote.isUpvote
+            )
             print("Failed to remove vote: \(error)")
         }
     }
@@ -375,63 +391,34 @@ public final class SharedRecipeStore {
         VoteState(from: userVotes[recipe.id])
     }
 
-    private func updateLocalVoteCounts(for recipe: SharedRecipe, newIsUpvote: Bool, previousVote: Vote?) {
+    /// Apply a vote-count delta: optionally remove one vote type and/or add another.
+    private func applyLocalVoteDelta(
+        for recipe: SharedRecipe,
+        removing: Bool?,
+        adding: Bool?
+    ) {
         guard let index = recipes.firstIndex(where: { $0.id == recipe.id }) else { return }
 
-        var updatedRecipe = recipes[index]
+        var upvotes = recipes[index].upvoteCount
+        var downvotes = recipes[index].downvoteCount
 
-        // Remove previous vote effect if any
-        if let prev = previousVote {
-            if prev.isUpvote {
-                updatedRecipe = updatedRecipe.withVoteCounts(
-                    upvotes: max(0, updatedRecipe.upvoteCount - 1),
-                    downvotes: updatedRecipe.downvoteCount
-                )
+        if let removing {
+            if removing {
+                upvotes = max(0, upvotes - 1)
             } else {
-                updatedRecipe = updatedRecipe.withVoteCounts(
-                    upvotes: updatedRecipe.upvoteCount,
-                    downvotes: max(0, updatedRecipe.downvoteCount - 1)
-                )
+                downvotes = max(0, downvotes - 1)
             }
         }
 
-        // Add new vote effect
-        if newIsUpvote {
-            updatedRecipe = updatedRecipe.withVoteCounts(
-                upvotes: updatedRecipe.upvoteCount + 1,
-                downvotes: updatedRecipe.downvoteCount
-            )
-        } else {
-            updatedRecipe = updatedRecipe.withVoteCounts(
-                upvotes: updatedRecipe.upvoteCount,
-                downvotes: updatedRecipe.downvoteCount + 1
-            )
-        }
-
-        recipes[index] = updatedRecipe
-    }
-
-    private func revertLocalVoteCounts(for recipe: SharedRecipe, previousVote: Vote?) {
-        guard let index = recipes.firstIndex(where: { $0.id == recipe.id }) else { return }
-
-        var updatedRecipe = recipes[index]
-
-        // Restore to state before our optimistic update
-        if let prev = previousVote {
-            if prev.isUpvote {
-                updatedRecipe = updatedRecipe.withVoteCounts(
-                    upvotes: updatedRecipe.upvoteCount,
-                    downvotes: max(0, updatedRecipe.downvoteCount - 1)
-                )
+        if let adding {
+            if adding {
+                upvotes += 1
             } else {
-                updatedRecipe = updatedRecipe.withVoteCounts(
-                    upvotes: max(0, updatedRecipe.upvoteCount - 1),
-                    downvotes: updatedRecipe.downvoteCount
-                )
+                downvotes += 1
             }
         }
 
-        recipes[index] = updatedRecipe
+        recipes[index] = recipes[index].withVoteCounts(upvotes: upvotes, downvotes: downvotes)
     }
 
     // MARK: - Reporting

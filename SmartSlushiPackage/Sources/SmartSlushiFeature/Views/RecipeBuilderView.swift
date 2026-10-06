@@ -30,9 +30,12 @@ struct OptimizationResult: Identifiable {
     }
 
     var wasSuccessful: Bool {
-        afterStats.slushabilityStatus.isOptimal ||
-        (targetBrixRange.contains(afterStats.finalBrix) &&
-         (targetABVRange.contains(afterStats.finalABV) || afterStats.finalABV < targetABVRange.lowerBound))
+        // Never claim success for mixes that will not freeze
+        guard afterStats.slushabilityStatus != .willNotFreeze else { return false }
+        if afterStats.slushabilityStatus.isOptimal { return true }
+        return targetBrixRange.contains(afterStats.finalBrix)
+            && (targetABVRange.contains(afterStats.finalABV)
+                || afterStats.finalABV < targetABVRange.lowerBound)
     }
 }
 
@@ -59,21 +62,39 @@ public struct RecipeBuilderView: View {
     @State private var optimizationResult: OptimizationResult?
     @State private var showingOptimizationResult = false
     @State private var showingSaveConfirmation = false
+    @State private var showingClearConfirmation = false
     @State private var showingRecipeOutput = false
     @State private var showingBatchScaling = false
     @State private var showingCommunityRecipes = false
     @State private var showingPublishSheet = false
+    @State private var pendingLoadedRecipe: Recipe?
+    @State private var hasAppliedInitialDefaults = false
+    /// Skip ingredient scaling when `batchSizeInput` is written programmatically (rounding would otherwise re-scale).
+    @State private var suppressBatchSizeInputHandler = false
 
     private let calculator = SlushCalculator()
     private let optimizer = RecipeOptimizer()
+    private let shouldApplySettingsDefaults: Bool
 
     /// Units available for batch size display
     private static let volumeDisplayUnits: [MeasurementUnit] = [.oz, .cup, .ml]
 
     public init(recipe: Recipe? = nil) {
         let initialRecipe = recipe ?? Recipe(name: "New Recipe")
+        let initialDisplayUnit = initialRecipe.targetUnit
+        let initialDisplayValue = MeasurementUnit.oz.convert(initialRecipe.targetBatchSize, to: initialDisplayUnit)
+        let initialBatchInput: String
+        if initialDisplayUnit == .ml {
+            initialBatchInput = String(format: "%.0f", initialDisplayValue)
+        } else if initialDisplayUnit == .cup {
+            initialBatchInput = String(format: "%.1f", initialDisplayValue)
+        } else {
+            initialBatchInput = String(format: "%.0f", initialDisplayValue)
+        }
+
+        self.shouldApplySettingsDefaults = recipe == nil
         _recipe = State(initialValue: initialRecipe)
-        _batchSizeInput = State(initialValue: String(format: "%.0f", initialRecipe.targetBatchSize))
+        _batchSizeInput = State(initialValue: initialBatchInput)
         _displayUnit = State(initialValue: initialRecipe.targetUnit)
     }
 
@@ -131,6 +152,7 @@ public struct RecipeBuilderView: View {
                     } label: {
                         Image(systemName: "line.3.horizontal")
                     }
+                    .accessibilityLabel("Menu")
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -150,9 +172,9 @@ public struct RecipeBuilderView: View {
                     loadTemplate(template)
                 }
             }
-            .sheet(isPresented: $showingSavedRecipes) {
-                SavedRecipesView { savedRecipe in
-                    loadSavedRecipe(savedRecipe)
+            .sheet(isPresented: $showingSavedRecipes, onDismiss: applyPendingLoadedRecipe) {
+                SavedRecipesView { loadedRecipe in
+                    pendingLoadedRecipe = loadedRecipe
                 }
             }
             .sheet(isPresented: $showingOptimizationResult) {
@@ -167,8 +189,22 @@ public struct RecipeBuilderView: View {
             } message: {
                 Text("Your recipe has been saved successfully.")
             }
+            .alert("Clear Recipe?", isPresented: $showingClearConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Clear", role: .destructive) {
+                    clearRecipe()
+                }
+            } message: {
+                Text("This starts a new blank recipe. Your saved recipes are not deleted.")
+            }
             .sheet(isPresented: $showingRecipeOutput) {
-                RecipeOutputView(recipe: recipe)
+                RecipeOutputView(recipe: recipe) { importedRecipe in
+                    withAnimation {
+                        recipe = importedRecipe
+                        displayUnit = recipe.targetUnit
+                        writeBatchSizeInput(formatBatchSize(recipe.targetBatchSize, for: displayUnit))
+                    }
+                }
             }
             .sheet(isPresented: $showingSettings) {
                 SettingsView()
@@ -181,7 +217,7 @@ public struct RecipeBuilderView: View {
                 ) { scaledRecipe in
                     withAnimation {
                         recipe = scaledRecipe
-                        batchSizeInput = formatBatchSize(scaledRecipe.targetBatchSize, for: displayUnit)
+                        writeBatchSizeInput(formatBatchSize(scaledRecipe.targetBatchSize, for: displayUnit))
                     }
                 }
                 .environment(database)
@@ -192,7 +228,7 @@ public struct RecipeBuilderView: View {
                     withAnimation {
                         recipe = importedRecipe
                         displayUnit = recipe.targetUnit
-                        batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
+                        writeBatchSizeInput(formatBatchSize(recipe.targetBatchSize, for: displayUnit))
                     }
                 }
                 .environment(sharedRecipeStore)
@@ -203,6 +239,17 @@ public struct RecipeBuilderView: View {
                 PublishRecipeSheet(recipe: recipe)
                     .environment(sharedRecipeStore)
                     .environment(database)
+            }
+            .onAppear {
+                applyUserDefaultsIfNeeded()
+                // Always sync taste preferences from settings (including when editing a saved recipe)
+                if !shouldApplySettingsDefaults || hasAppliedInitialDefaults {
+                    preferences = settingsManager.settings.drinkPreferences
+                }
+            }
+            .onChange(of: recipe.ingredients) { _, _ in
+                // Keep batch metadata aligned when amounts/units change (not only add/remove)
+                syncTargetBatchSizeFromIngredients()
             }
         }
     }
@@ -215,6 +262,7 @@ public struct RecipeBuilderView: View {
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
                 .textFieldStyle(.plain)
+                .accessibilityLabel("Recipe name")
 
             HStack(spacing: 8) {
                 Text("Batch Size:")
@@ -225,7 +273,13 @@ public struct RecipeBuilderView: View {
                     .multilineTextAlignment(.trailing)
                     .frame(width: 70)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Batch size")
+                    .accessibilityValue("\(batchSizeInput) \(displayUnit.abbreviation)")
                     .onChange(of: batchSizeInput) { _, newValue in
+                        if suppressBatchSizeInputHandler {
+                            suppressBatchSizeInputHandler = false
+                            return
+                        }
                         updateBatchSize(from: newValue)
                     }
 
@@ -236,6 +290,7 @@ public struct RecipeBuilderView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 140)
+                .accessibilityLabel("Batch size unit")
                 .onChange(of: displayUnit) { oldUnit, newUnit in
                     convertBatchSize(from: oldUnit, to: newUnit)
                 }
@@ -260,22 +315,50 @@ public struct RecipeBuilderView: View {
         guard let value = Double(input), value > 0 else { return }
         // Store internally always in oz
         let valueInOz = displayUnit.convert(value, to: .oz)
+        let previousSize = recipe.targetBatchSize
+
         recipe.targetBatchSize = valueInOz
         recipe.targetUnit = displayUnit
+
+        // Scale existing ingredients so the batch-size field drives the recipe
+        guard !recipe.ingredients.isEmpty, previousSize > 0, abs(valueInOz - previousSize) > 0.01 else {
+            return
+        }
+        recipe = calculator.scaleRecipe(
+            recipe,
+            toBatchSize: valueInOz,
+            ingredientLookup: database.lookupFunction()
+        )
     }
 
     private func convertBatchSize(from oldUnit: MeasurementUnit, to newUnit: MeasurementUnit) {
-        guard let currentValue = Double(batchSizeInput), currentValue > 0 else { return }
-        let convertedValue = oldUnit.convert(currentValue, to: newUnit)
-        // Format based on unit - ml uses whole numbers, oz and cups use decimals
-        if newUnit == .ml {
-            batchSizeInput = String(format: "%.0f", convertedValue)
-        } else if newUnit == .cup {
-            batchSizeInput = String(format: "%.1f", convertedValue)
-        } else {
-            batchSizeInput = String(format: "%.0f", convertedValue)
+        guard let currentValue = Double(batchSizeInput), currentValue > 0 else {
+            recipe.targetUnit = newUnit
+            return
         }
+        let convertedValue = oldUnit.convert(currentValue, to: newUnit)
+        // Display-only conversion — do not re-scale ingredients via batchSizeInput onChange
+        writeBatchSizeInput(formatForDisplay(convertedValue, unit: newUnit))
         recipe.targetUnit = newUnit
+    }
+
+    /// Format a display-unit amount for the batch size field
+    private func formatForDisplay(_ value: Double, unit: MeasurementUnit) -> String {
+        if unit == .ml {
+            return String(format: "%.0f", value)
+        } else if unit == .cup {
+            return String(format: "%.1f", value)
+        } else {
+            return String(format: "%.0f", value)
+        }
+    }
+
+    /// Write the batch size field without triggering ingredient scaling
+    private func writeBatchSizeInput(_ value: String) {
+        // If the string is unchanged, onChange will not fire — do not leave suppress stuck
+        guard batchSizeInput != value else { return }
+        suppressBatchSizeInputHandler = true
+        batchSizeInput = value
     }
 
     // MARK: - Quick Stats Bar
@@ -309,6 +392,7 @@ public struct RecipeBuilderView: View {
                         .labelStyle(.iconOnly)
                         .font(.title2)
                 }
+                .accessibilityLabel("Add ingredient")
             }
 
             if recipe.ingredients.isEmpty {
@@ -376,21 +460,42 @@ public struct RecipeBuilderView: View {
                 VStack(spacing: 16) {
                     PreferenceSlider(
                         title: "Sweetness",
-                        value: $preferences.sweetnessLevel,
+                        value: Binding(
+                            get: { preferences.sweetnessLevel },
+                            set: { newValue in
+                                preferences.sweetnessLevel = newValue
+                                settingsManager.setDrinkPreferences(preferences)
+                                recipeStore.updateDrinkPreferences(preferences)
+                            }
+                        ),
                         leftLabel: "Tart",
                         rightLabel: "Sweet"
                     )
 
                     PreferenceSlider(
                         title: "Thickness",
-                        value: $preferences.slushThickness,
+                        value: Binding(
+                            get: { preferences.slushThickness },
+                            set: { newValue in
+                                preferences.slushThickness = newValue
+                                settingsManager.setDrinkPreferences(preferences)
+                                recipeStore.updateDrinkPreferences(preferences)
+                            }
+                        ),
                         leftLabel: "Sippable",
                         rightLabel: "Thick"
                     )
 
                     PreferenceSlider(
                         title: "Strength",
-                        value: $preferences.alcoholStrength,
+                        value: Binding(
+                            get: { preferences.alcoholStrength },
+                            set: { newValue in
+                                preferences.alcoholStrength = newValue
+                                settingsManager.setDrinkPreferences(preferences)
+                                recipeStore.updateDrinkPreferences(preferences)
+                            }
+                        ),
                         leftLabel: "Light",
                         rightLabel: "Strong"
                     )
@@ -438,7 +543,7 @@ public struct RecipeBuilderView: View {
                 .disabled(recipe.ingredients.isEmpty)
 
                 Button {
-                    clearRecipe()
+                    showingClearConfirmation = true
                 } label: {
                     Label("Clear", systemImage: "trash")
                         .frame(maxWidth: .infinity)
@@ -446,12 +551,29 @@ public struct RecipeBuilderView: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.red)
-                .disabled(recipe.ingredients.isEmpty)
+                .disabled(recipe.ingredients.isEmpty && recipe.name == "New Recipe")
+                .accessibilityLabel("Clear recipe")
             }
         }
     }
 
     // MARK: - Actions
+
+    private func applyUserDefaultsIfNeeded() {
+        guard shouldApplySettingsDefaults, !hasAppliedInitialDefaults else { return }
+        hasAppliedInitialDefaults = true
+
+        preferences = settingsManager.settings.drinkPreferences
+
+        let preferredUnit = settingsManager.settings.preferredUnit
+        // defaultBatchSize is always stored in ounces
+        let defaultBatchSizeOz = max(1, settingsManager.settings.defaultBatchSize)
+
+        recipe.targetBatchSize = defaultBatchSizeOz
+        recipe.targetUnit = preferredUnit
+        displayUnit = preferredUnit
+        writeBatchSizeInput(formatBatchSize(defaultBatchSizeOz, for: preferredUnit))
+    }
 
     private func calculateCurrentStats() -> RecipeStats {
         calculator.calculateStats(
@@ -470,12 +592,23 @@ public struct RecipeBuilderView: View {
         )
         recipe.ingredients.append(recipeIngredient)
         recipe.modifiedAt = Date()
+        syncTargetBatchSizeFromIngredients()
+        recipeStore.markIngredientAsRecentlyUsed(ingredient.id)
         database.markAsRecentlyUsed(ingredient.id)
     }
 
     private func removeIngredient(_ ingredient: RecipeIngredient) {
         recipe.ingredients.removeAll { $0.id == ingredient.id }
         recipe.modifiedAt = Date()
+        syncTargetBatchSizeFromIngredients()
+    }
+
+    /// Keep metadata batch size aligned with actual ingredient volume
+    private func syncTargetBatchSizeFromIngredients() {
+        let total = recipe.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
+        guard total > 0 else { return }
+        recipe.targetBatchSize = total
+        writeBatchSizeInput(formatBatchSize(total, for: displayUnit))
     }
 
     private func autoBalance() {
@@ -489,11 +622,15 @@ public struct RecipeBuilderView: View {
         // Capture before stats and original batch size
         let beforeStats = calculateCurrentStats()
         let originalBatchSize = beforeStats.totalVolumeOz
-        let beforeIngredients = Dictionary(
-            uniqueKeysWithValues: recipe.ingredients.map { ($0.ingredientId, $0.amount) }
-        )
+        let hasLockedIngredients = recipe.ingredients.contains(where: \.isLocked)
 
-        // Run optimization
+        // Aggregate volumes in oz by ingredientId (duplicate rows / mixed units safe)
+        var beforeIngredientsOz: [UUID: Double] = [:]
+        for item in recipe.ingredients {
+            beforeIngredientsOz[item.ingredientId, default: 0] += item.volumeInOz
+        }
+
+        // Preference targets clamped to ABV-aware science windows
         let targets = preferences.toOptimizationTargets()
         var balanced = optimizer.autoBalance(
             recipe: recipe,
@@ -504,8 +641,9 @@ public struct RecipeBuilderView: View {
             sweetenerIngredientId: simpleSyrup.id
         )
 
-        // Scale back to original batch size to maintain volume while preserving optimized ratios
-        if originalBatchSize > 0 {
+        // Scale back only when nothing is locked — lock-aware scale-back would
+        // squeeze out added water/sweetener and undo dilution.
+        if originalBatchSize > 0 && !hasLockedIngredients {
             balanced = calculator.scaleRecipe(
                 balanced,
                 toBatchSize: originalBatchSize,
@@ -513,25 +651,37 @@ public struct RecipeBuilderView: View {
             )
         }
 
-        // Calculate after stats (now at original batch size with optimized ratios)
+        // Keep batch size metadata aligned with actual volume
+        let balancedVolume = balanced.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
+        if balancedVolume > 0 {
+            balanced.targetBatchSize = balancedVolume
+        }
+
+        // Calculate after stats
         let afterStats = calculator.calculateStats(
             for: balanced.ingredients,
-            ingredientLookup: database.lookupFunction()
+            ingredientLookup: database.lookupFunction(),
+            servingSizeOz: settingsManager.settings.servingSizeOz
         )
 
-        // Determine ingredient changes
-        var ingredientChanges: [OptimizationResult.IngredientChange] = []
+        // Determine ingredient changes in ounces (summed by ingredientId)
+        var afterAmountsOz: [UUID: Double] = [:]
         for ingredient in balanced.ingredients {
-            let previousAmount = beforeIngredients[ingredient.ingredientId]
-            let ingredientName = database.ingredient(for: ingredient.ingredientId)?.name ?? "Unknown"
+            afterAmountsOz[ingredient.ingredientId, default: 0] += ingredient.volumeInOz
+        }
 
-            // Only include if it's new or the amount changed
-            if previousAmount == nil || abs(ingredient.amount - (previousAmount ?? 0)) > 0.01 {
+        var ingredientChanges: [OptimizationResult.IngredientChange] = []
+        let allIds = Set(beforeIngredientsOz.keys).union(afterAmountsOz.keys)
+        for ingredientId in allIds {
+            let previousOz = beforeIngredientsOz[ingredientId]
+            let afterOz = afterAmountsOz[ingredientId] ?? 0
+            let ingredientName = database.ingredient(for: ingredientId)?.name ?? "Unknown"
+            if previousOz == nil || abs(afterOz - (previousOz ?? 0)) > 0.01 {
                 ingredientChanges.append(OptimizationResult.IngredientChange(
                     ingredientName: ingredientName,
-                    previousAmount: previousAmount,
-                    newAmount: ingredient.amount,
-                    unit: ingredient.unit
+                    previousAmount: previousOz,
+                    newAmount: afterOz,
+                    unit: .oz
                 ))
             }
         }
@@ -547,6 +697,7 @@ public struct RecipeBuilderView: View {
 
         withAnimation {
             recipe = balanced
+            writeBatchSizeInput(formatBatchSize(recipe.targetBatchSize, for: displayUnit))
             isAutoBalancing = false
             optimizationResult = result
 
@@ -566,7 +717,7 @@ public struct RecipeBuilderView: View {
 
     private func saveRecipe() {
         recipe.modifiedAt = Date()
-        recipeStore.save(recipe)
+        recipeStore.save(recipe, ingredientLookup: database.lookupFunction())
         showingSaveConfirmation = true
     }
 
@@ -574,15 +725,21 @@ public struct RecipeBuilderView: View {
         withAnimation {
             recipe = template.createRecipe(targetBatchSize: recipe.targetBatchSize)
             recipe.targetUnit = displayUnit
-            batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
+            writeBatchSizeInput(formatBatchSize(recipe.targetBatchSize, for: displayUnit))
         }
     }
 
-    private func loadSavedRecipe(_ savedRecipe: SavedRecipe) {
+    private func applyPendingLoadedRecipe() {
+        guard let loadedRecipe = pendingLoadedRecipe else { return }
+        pendingLoadedRecipe = nil
+        loadSavedRecipe(loadedRecipe)
+    }
+
+    private func loadSavedRecipe(_ loadedRecipe: Recipe) {
         withAnimation {
-            recipe = savedRecipe.toRecipe()
+            recipe = loadedRecipe
             displayUnit = recipe.targetUnit
-            batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
+            writeBatchSizeInput(formatBatchSize(recipe.targetBatchSize, for: displayUnit))
         }
     }
 
@@ -599,8 +756,14 @@ public struct RecipeBuilderView: View {
 
     private func clearRecipe() {
         withAnimation {
-            recipe.ingredients.removeAll()
-            recipe.modifiedAt = Date()
+            // New identity so Save creates a new record instead of overwriting a loaded recipe
+            var blank = Recipe(name: "New Recipe")
+            blank.targetBatchSize = settingsManager.settings.defaultBatchSize
+            blank.targetUnit = settingsManager.settings.preferredUnit
+            recipe = blank
+            displayUnit = blank.targetUnit
+            writeBatchSizeInput(formatBatchSize(blank.targetBatchSize, for: displayUnit))
+            preferences = settingsManager.settings.drinkPreferences
         }
     }
 }
@@ -691,9 +854,14 @@ struct QuickStatsBar: View {
     }
 
     private var brixStatus: StatStatus {
-        if stats.finalBrix < 11 || stats.finalBrix > 17 { return .bad }
-        if isBrixInTargetRange { return .good }
-        if stats.finalBrix < 13 || stats.finalBrix > 15 { return .warning }
+        let optimal = SlushCalculator().optimalBrixRange(forABV: stats.finalABV)
+        if stats.finalBrix < optimal.lowerBound - 2 || stats.finalBrix > optimal.upperBound + 2 {
+            return .bad
+        }
+        if isBrixInTargetRange || optimal.contains(stats.finalBrix) { return .good }
+        if stats.finalBrix < optimal.lowerBound || stats.finalBrix > optimal.upperBound {
+            return .warning
+        }
         return .neutral
     }
 }
@@ -785,6 +953,9 @@ struct StatBadgeWithTarget: View {
                 showingTooltip = true
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(tooltip != nil ? .isButton : [])
+        .accessibilityHint(tooltip != nil ? "Shows explanation for \(title)" : "")
         .sheet(isPresented: $showingTooltip) {
             if let tooltip {
                 TooltipView(content: tooltip)
@@ -827,6 +998,9 @@ struct SlushabilityIndicator: View {
                 showingTooltip = true
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(showTooltip ? .isButton : [])
+        .accessibilityHint(showTooltip ? "Shows slushability explanation" : "")
         .sheet(isPresented: $showingTooltip) {
             TooltipView(content: .slushability)
         }
@@ -875,6 +1049,17 @@ struct IngredientRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            Button {
+                recipeIngredient.isLocked.toggle()
+            } label: {
+                Image(systemName: recipeIngredient.isLocked ? "lock.fill" : "lock.open")
+                    .foregroundStyle(recipeIngredient.isLocked ? .orange : .secondary)
+                    .frame(width: 24)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(recipeIngredient.isLocked ? "Unlock ingredient" : "Lock ingredient")
+            .accessibilityHint("Locked ingredients are not changed by auto-balance")
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(ingredient?.name ?? "Unknown")
                     .font(.body)
@@ -903,6 +1088,9 @@ struct IngredientRow: View {
                     .multilineTextAlignment(.trailing)
                     .frame(width: 60)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(recipeIngredient.isLocked)
+                    .accessibilityLabel("Amount")
+                    .accessibilityValue("\(recipeIngredient.amount) \(recipeIngredient.unit.abbreviation)")
 
                 Picker("Unit", selection: $recipeIngredient.unit) {
                     ForEach(MeasurementUnit.allCases, id: \.self) { unit in
@@ -912,6 +1100,12 @@ struct IngredientRow: View {
                 .pickerStyle(.menu)
                 .labelsHidden()
                 .frame(width: 60)
+                .disabled(recipeIngredient.isLocked)
+                .accessibilityLabel("Unit")
+                .onChange(of: recipeIngredient.unit) { oldUnit, newUnit in
+                    guard oldUnit != newUnit else { return }
+                    recipeIngredient.amount = oldUnit.convert(recipeIngredient.amount, to: newUnit)
+                }
             }
 
             Button(role: .destructive) {
@@ -921,8 +1115,10 @@ struct IngredientRow: View {
                     .foregroundStyle(.red)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Remove \(ingredient?.name ?? "ingredient")")
         }
         .padding(.vertical, 8)
+        .opacity(recipeIngredient.isLocked ? 0.85 : 1)
     }
 }
 
@@ -937,8 +1133,8 @@ struct PreferenceSlider: View {
     // Track if we've hit the optimal range to provide haptic feedback
     @State private var wasInOptimalRange = false
 
-    /// Optimal range is around the middle (0.4-0.6) for balanced drinks
-    private var isInOptimalRange: Bool {
+    /// Mid-slider range for the default taste preference (not freeze-optimal science)
+    private var isNearDefault: Bool {
         value >= 0.4 && value <= 0.6
     }
 
@@ -949,14 +1145,14 @@ struct PreferenceSlider: View {
                     .font(.subheadline.weight(.medium))
                 Spacer()
 
-                // Show "Balanced" indicator when in optimal range
-                if isInOptimalRange {
-                    Text("Balanced")
+                // Show "Default" when near the middle of the taste slider
+                if isNearDefault {
+                    Text("Default")
                         .font(.caption2)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.green.opacity(0.15))
+                        .background(Color.secondary.opacity(0.12))
                         .clipShape(Capsule())
                 }
             }
@@ -968,6 +1164,8 @@ struct PreferenceSlider: View {
                     .frame(width: 60, alignment: .leading)
 
                 Slider(value: $value, in: 0...1)
+                    .accessibilityLabel(title)
+                    .accessibilityValue(String(format: "%.0f percent", value * 100))
                     .onChange(of: value) { _, newValue in
                         let nowInRange = newValue >= 0.4 && newValue <= 0.6
                         if nowInRange && !wasInOptimalRange {
@@ -1064,7 +1262,7 @@ struct OptimizationResultView: View {
                     StatComparisonItem(
                         label: "Brix",
                         value: String(format: "%.1f", result.beforeStats.finalBrix),
-                        status: brixStatus(for: result.beforeStats.finalBrix)
+                        status: brixStatus(for: result.beforeStats.finalBrix, abv: result.beforeStats.finalABV)
                     )
 
                     StatComparisonItem(
@@ -1095,7 +1293,7 @@ struct OptimizationResultView: View {
                     StatComparisonItem(
                         label: "Brix",
                         value: String(format: "%.1f", result.afterStats.finalBrix),
-                        status: brixStatus(for: result.afterStats.finalBrix)
+                        status: brixStatus(for: result.afterStats.finalBrix, abv: result.afterStats.finalABV)
                     )
 
                     StatComparisonItem(
@@ -1209,11 +1407,18 @@ struct OptimizationResultView: View {
         return .neutral
     }
 
-    private func brixStatus(for brix: Double) -> StatStatus {
-        if brix < 11 || brix > 17 { return .bad }
-        if brix < 13 || brix > 15 { return .warning }
-        return .good
+    private func brixStatus(for brix: Double, abv: Double) -> StatStatus {
+        let optimal = CalculatorHolder.shared.optimalBrixRange(forABV: abv)
+        if brix < optimal.lowerBound - 2 || brix > optimal.upperBound + 2 { return .bad }
+        if optimal.contains(brix) { return .good }
+        if brix < optimal.lowerBound || brix > optimal.upperBound { return .warning }
+        return .neutral
     }
+}
+
+/// Shared calculator instance for lightweight status helpers in result views
+private enum CalculatorHolder {
+    static let shared = SlushCalculator()
 }
 
 // MARK: - Stat Comparison Item

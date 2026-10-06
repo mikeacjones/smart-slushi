@@ -57,9 +57,28 @@ public struct ExportableRecipe: Codable, Sendable {
         public let abv: Double
         public let brix: Double
         public let category: String
+        public let isLocked: Bool?
+
+        public init(
+            name: String,
+            amount: Double,
+            unit: String,
+            abv: Double,
+            brix: Double,
+            category: String,
+            isLocked: Bool? = false
+        ) {
+            self.name = name
+            self.amount = amount
+            self.unit = unit
+            self.abv = abv
+            self.brix = brix
+            self.category = category
+            self.isLocked = isLocked
+        }
     }
 
-    public static let currentVersion = "1.0"
+    public static let currentVersion = "1.1"
 }
 
 // MARK: - Recipe Serializer
@@ -120,7 +139,7 @@ public final class RecipeSerializer: Sendable {
         }
 
         lines.append("")
-        lines.append("Batch Size: \(formatAmount(recipe.targetBatchSize, unit: recipe.targetUnit))")
+        lines.append("Batch Size: \(formatBatchSize(recipe))")
         lines.append("")
 
         // Ingredients
@@ -172,7 +191,7 @@ public final class RecipeSerializer: Sendable {
 
         lines.append("SHOPPING LIST: \(recipe.name)")
         lines.append("===================================")
-        lines.append("Batch Size: \(formatAmount(recipe.targetBatchSize, unit: recipe.targetUnit))")
+        lines.append("Batch Size: \(formatBatchSize(recipe))")
         lines.append("")
 
         // Group ingredients by category
@@ -230,6 +249,11 @@ public final class RecipeSerializer: Sendable {
         decoder.dateDecodingStrategy = .iso8601
 
         let exportable = try decoder.decode(ExportableRecipe.self, from: data)
+        // Accept current and prior 1.x exports
+        let supportedVersions: Set<String> = ["1.0", "1.1", ExportableRecipe.currentVersion]
+        guard supportedVersions.contains(exportable.version) else {
+            throw RecipeSerializerError.versionMismatch(exportable.version)
+        }
         return try createRecipe(from: exportable, ingredientDatabase: ingredientDatabase)
     }
 
@@ -239,16 +263,26 @@ public final class RecipeSerializer: Sendable {
         _ recipe: Recipe,
         ingredientLookup: @escaping (UUID) -> Ingredient?
     ) -> ExportableRecipe {
-        let ingredientData = recipe.ingredients.compactMap { recipeIngredient -> ExportableRecipe.IngredientData? in
-            guard let ingredient = ingredientLookup(recipeIngredient.ingredientId) else { return nil }
-
+        let ingredientData = recipe.ingredients.map { recipeIngredient -> ExportableRecipe.IngredientData in
+            if let ingredient = ingredientLookup(recipeIngredient.ingredientId) {
+                return ExportableRecipe.IngredientData(
+                    name: ingredient.name,
+                    amount: recipeIngredient.amount,
+                    unit: recipeIngredient.unit.rawValue,
+                    abv: ingredient.abv,
+                    brix: ingredient.brix,
+                    category: ingredient.category.rawValue,
+                    isLocked: recipeIngredient.isLocked
+                )
+            }
             return ExportableRecipe.IngredientData(
-                name: ingredient.name,
+                name: "Unknown Ingredient",
                 amount: recipeIngredient.amount,
                 unit: recipeIngredient.unit.rawValue,
-                abv: ingredient.abv,
-                brix: ingredient.brix,
-                category: ingredient.category.rawValue
+                abv: 0,
+                brix: 0,
+                category: IngredientCategory.misc.rawValue,
+                isLocked: recipeIngredient.isLocked
             )
         }
 
@@ -278,23 +312,44 @@ public final class RecipeSerializer: Sendable {
         var unmatchedIngredients: [String] = []
 
         for ingredientData in exportable.recipe.ingredients {
-            // Try to find matching ingredient by name
+            let unit = MeasurementUnit(rawValue: ingredientData.unit) ?? .oz
+            let isLocked = ingredientData.isLocked ?? false
+
+            // Prefer exact name match in the local database
             if let matchingIngredient = ingredientDatabase.search(ingredientData.name).first(where: {
                 $0.name.lowercased() == ingredientData.name.lowercased()
             }) {
-                let unit = MeasurementUnit(rawValue: ingredientData.unit) ?? .oz
                 let recipeIngredient = RecipeIngredient(
                     ingredientId: matchingIngredient.id,
                     amount: ingredientData.amount,
-                    unit: unit
+                    unit: unit,
+                    isLocked: isLocked
                 )
                 recipeIngredients.append(recipeIngredient)
             } else {
+                // Recreate missing ingredients as custom entries so imports stay complete
+                let category = IngredientCategory(rawValue: ingredientData.category) ?? .misc
+                let custom = Ingredient(
+                    name: ingredientData.name,
+                    category: category,
+                    abv: ingredientData.abv,
+                    brix: ingredientData.brix,
+                    defaultUnit: unit,
+                    isCustom: true,
+                    notes: "Imported with recipe"
+                )
+                ingredientDatabase.addCustomIngredient(custom)
                 unmatchedIngredients.append(ingredientData.name)
+
+                recipeIngredients.append(RecipeIngredient(
+                    ingredientId: custom.id,
+                    amount: ingredientData.amount,
+                    unit: unit,
+                    isLocked: isLocked
+                ))
             }
         }
 
-        // If we couldn't match any ingredients, that's an error
         if recipeIngredients.isEmpty && !exportable.recipe.ingredients.isEmpty {
             throw RecipeSerializerError.noMatchingIngredients(unmatchedIngredients)
         }
@@ -326,6 +381,11 @@ public final class RecipeSerializer: Sendable {
                 return String(format: "%.2f %@", amount, unit.abbreviation)
             }
         }
+    }
+
+    private func formatBatchSize(_ recipe: Recipe) -> String {
+        let converted = MeasurementUnit.oz.convert(recipe.targetBatchSize, to: recipe.targetUnit)
+        return formatAmount(converted, unit: recipe.targetUnit)
     }
 }
 

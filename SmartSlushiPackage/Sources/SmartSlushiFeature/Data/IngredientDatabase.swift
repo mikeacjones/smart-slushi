@@ -63,6 +63,7 @@ public final class IngredientDatabase: @unchecked Sendable {
 
     private init() {
         loadBuiltInIngredients()
+        loadCustomIngredients()
     }
 
     // MARK: - Loading
@@ -207,7 +208,9 @@ public final class IngredientDatabase: @unchecked Sendable {
 
     // MARK: - Custom Ingredients
 
-    /// Add a custom ingredient to the database
+    private static let customIngredientsKey = "com.smartslushi.customIngredients"
+
+    /// Add a custom ingredient to the database and persist it
     public func addCustomIngredient(_ ingredient: Ingredient) {
         // Create new with isCustom = true
         let customIngredient = Ingredient(
@@ -221,16 +224,50 @@ public final class IngredientDatabase: @unchecked Sendable {
             notes: ingredient.notes
         )
         ingredients.append(customIngredient)
+        persistCustomIngredients()
     }
 
     /// Remove a custom ingredient
     public func removeCustomIngredient(_ id: UUID) {
         ingredients.removeAll { $0.id == id && $0.isCustom }
+        persistCustomIngredients()
     }
 
     /// Get all custom ingredients
     public var customIngredients: [Ingredient] {
         ingredients.filter { $0.isCustom }
+    }
+
+    private func loadCustomIngredients() {
+        guard let data = UserDefaults.standard.data(forKey: Self.customIngredientsKey) else { return }
+        do {
+            let saved = try JSONDecoder().decode([Ingredient].self, from: data)
+            let existingIds = Set(ingredients.map(\.id))
+            for ingredient in saved where !existingIds.contains(ingredient.id) {
+                let restored = Ingredient(
+                    id: ingredient.id,
+                    name: ingredient.name,
+                    category: ingredient.category,
+                    abv: ingredient.abv,
+                    brix: ingredient.brix,
+                    defaultUnit: ingredient.defaultUnit,
+                    isCustom: true,
+                    notes: ingredient.notes
+                )
+                ingredients.append(restored)
+            }
+        } catch {
+            print("Failed to load custom ingredients: \(error)")
+        }
+    }
+
+    private func persistCustomIngredients() {
+        do {
+            let data = try JSONEncoder().encode(customIngredients)
+            UserDefaults.standard.set(data, forKey: Self.customIngredientsKey)
+        } catch {
+            print("Failed to save custom ingredients: \(error)")
+        }
     }
 
     // MARK: - Recent Ingredients Tracking
@@ -247,6 +284,18 @@ public final class IngredientDatabase: @unchecked Sendable {
         if recentIngredientIds.count > maxRecentIngredients {
             recentIngredientIds = Array(recentIngredientIds.prefix(maxRecentIngredients))
         }
+    }
+
+    /// Replace recent ingredient IDs from persisted storage
+    public func setRecentIngredientIds(_ ids: [UUID]) {
+        var uniqueValidIds: [UUID] = []
+        for id in ids where ingredient(for: id) != nil && !uniqueValidIds.contains(id) {
+            uniqueValidIds.append(id)
+            if uniqueValidIds.count >= maxRecentIngredients {
+                break
+            }
+        }
+        recentIngredientIds = uniqueValidIds
     }
 
     /// Clear recent ingredients list

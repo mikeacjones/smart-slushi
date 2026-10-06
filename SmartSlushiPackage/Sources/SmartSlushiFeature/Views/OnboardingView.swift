@@ -30,7 +30,7 @@ public struct OnboardingView: View {
             iconColor: .purple,
             title: "The Science Made Simple",
             subtitle: "Brix & ABV Explained",
-            description: "Brix measures sugar (aim for 13-15), ABV measures alcohol (keep under 10%). The right balance creates that perfect slush texture—not too icy, not too soupy."
+            description: "Brix estimates sugar (aim near 13–15, a bit lower at higher ABV). ABV is alcohol (keep at or under 10%). That balance makes slush—not icy, not soupy."
         ),
         OnboardingPage(
             icon: "wand.and.stars",

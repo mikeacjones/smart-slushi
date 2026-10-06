@@ -34,37 +34,41 @@ public enum SlushabilityStatus: Equatable, Sendable {
     }
 
     /// Evaluate slushability based on ABV and Brix values
-    public static func evaluate(abv: Double, brix: Double) -> SlushabilityStatus {
+    /// - Parameters:
+    ///   - abv: Final alcohol by volume percentage
+    ///   - brix: Final sugar content
+    ///   - optimalBrixRange: ABV-adjusted optimal Brix window (defaults to 13–15)
+    public static func evaluate(
+        abv: Double,
+        brix: Double,
+        optimalBrixRange: ClosedRange<Double> = 13...15
+    ) -> SlushabilityStatus {
         // Check ABV first - too high prevents freezing entirely
         if abv > 12 {
             return .willNotFreeze
         }
 
         if abv > 10 {
-            // At upper limit, give a warning but check Brix too
-            if brix < 12 {
-                return .warning("ABV at \(String(format: "%.1f", abv))% is high, and Brix at \(String(format: "%.1f", brix)) is low - may be icy.")
-            }
-            if brix > 16 {
-                return .warning("ABV at \(String(format: "%.1f", abv))% is high, and Brix at \(String(format: "%.1f", brix)) is high - may be soft.")
-            }
-            return .warning("ABV at \(String(format: "%.1f", abv))% is at the upper limit - may be softer than ideal.")
+            return .tooAlcoholic
         }
 
-        // ABV is acceptable, now check Brix
-        if brix < 11 {
+        // Hard failure bands outside the workable Brix window
+        let hardLow = max(11.0, optimalBrixRange.lowerBound - 2.0)
+        let hardHigh = min(18.0, optimalBrixRange.upperBound + 2.0)
+
+        if brix < hardLow {
             return .willNotFreeze
         }
 
-        if brix < 13 {
+        if brix < optimalBrixRange.lowerBound {
             return .notSweetEnough
         }
 
-        if brix > 17 {
+        if brix > hardHigh {
             return .willNotFreeze
         }
 
-        if brix > 15 {
+        if brix > optimalBrixRange.upperBound {
             return .tooSweet
         }
 
@@ -97,6 +101,36 @@ public struct RecipeIngredient: Identifiable, Codable, Hashable, Sendable {
         self.amount = amount
         self.unit = unit
         self.isLocked = isLocked
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case ingredientId
+        case amount
+        case unit
+        case isLocked
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        ingredientId = try container.decode(UUID.self, forKey: .ingredientId)
+        amount = try container.decode(Double.self, forKey: .amount)
+
+        let unitRaw = try container.decodeIfPresent(String.self, forKey: .unit) ?? MeasurementUnit.oz.rawValue
+        unit = MeasurementUnit(rawValue: unitRaw) ?? .oz
+
+        isLocked = try container.decodeIfPresent(Bool.self, forKey: .isLocked) ?? false
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(ingredientId, forKey: .ingredientId)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(unit.rawValue, forKey: .unit)
+        try container.encode(isLocked, forKey: .isLocked)
     }
 
     /// Get the volume in milliliters
@@ -189,7 +223,7 @@ public struct Recipe: Identifiable, Codable, Sendable {
         description: String? = nil,
         baseRecipeId: UUID? = nil,
         ingredients: [RecipeIngredient] = [],
-        targetBatchSize: Double = 72,
+        targetBatchSize: Double = 64,
         targetUnit: MeasurementUnit = .oz,
         createdAt: Date = Date(),
         modifiedAt: Date = Date()
@@ -254,12 +288,28 @@ public struct RecipeTemplate: Identifiable, Codable, Sendable {
     }
 
     /// Create a new Recipe instance from this template
-    public func createRecipe(targetBatchSize: Double = 72) -> Recipe {
-        Recipe(
+    public func createRecipe(targetBatchSize: Double = 64) -> Recipe {
+        let baseVolumeOz = baseIngredients.reduce(0.0) { partialResult, ingredient in
+            partialResult + ingredient.volumeInOz
+        }
+
+        let scaledIngredients: [RecipeIngredient]
+        if baseVolumeOz > 0, targetBatchSize > 0 {
+            let scaleFactor = targetBatchSize / baseVolumeOz
+            scaledIngredients = baseIngredients.map { ingredient in
+                var scaled = ingredient
+                scaled.amount = ingredient.amount * scaleFactor
+                return scaled
+            }
+        } else {
+            scaledIngredients = baseIngredients
+        }
+
+        return Recipe(
             name: name,
             description: description,
             baseRecipeId: id,
-            ingredients: baseIngredients,
+            ingredients: scaledIngredients,
             targetBatchSize: targetBatchSize
         )
     }

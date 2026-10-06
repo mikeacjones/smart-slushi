@@ -21,9 +21,14 @@ public final class UserSettingsManager: Sendable {
 
     // MARK: - Public Methods
 
+    /// Replace all settings (used when hydrating from CloudKit-backed store)
+    public func replaceSettings(_ newSettings: UserSettings) {
+        settings = newSettings
+    }
+
     /// Update the default batch size
     public func setDefaultBatchSize(_ size: Double) {
-        settings.defaultBatchSize = size
+        settings.defaultBatchSize = max(1, size)
     }
 
     /// Update the preferred measurement unit
@@ -31,9 +36,13 @@ public final class UserSettingsManager: Sendable {
         settings.preferredUnit = unit
     }
 
-    /// Update the machine model
+    /// Update the machine model and align default batch with working capacity
     public func setMachineModel(_ model: NinjaSlushiModel) {
         settings.machineModel = model
+        // Keep default batch within the new machine's working capacity when still at the previous default
+        if settings.defaultBatchSize > model.workingCapacity {
+            settings.defaultBatchSize = model.workingCapacity
+        }
     }
 
     /// Update the default drink preferences

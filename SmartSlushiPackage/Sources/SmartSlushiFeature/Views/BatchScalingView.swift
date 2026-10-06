@@ -128,7 +128,7 @@ struct BatchScalingView: View {
                         applyScaling()
                     }
                     .fontWeight(.semibold)
-                    .disabled(scalingResult == nil || scalingResult?.scaleFactor == 1.0)
+                    .disabled(scalingResult == nil || abs((scalingResult?.scaleFactor ?? 1) - 1.0) < 0.001)
                 }
             }
             .onAppear {
@@ -143,6 +143,11 @@ struct BatchScalingView: View {
                 }
             }
             .onChange(of: servingsPerPerson) { _, _ in
+                if scalingMode == .byServings {
+                    calculateServingsPreview()
+                }
+            }
+            .onChange(of: settingsManager.settings.servingSizeOz) { _, _ in
                 if scalingMode == .byServings {
                     calculateServingsPreview()
                 }
@@ -166,23 +171,26 @@ struct BatchScalingView: View {
 
     private var servingsInputSection: some View {
         VStack(spacing: 16) {
-            // Serving size info
+            // Serving size picker (inline — no need to leave for Settings)
             HStack {
                 Image(systemName: "cup.and.saucer.fill")
                     .foregroundStyle(.blue)
 
-                Text("Serving Size: \(Int(settingsManager.settings.servingSizeOz)) oz")
+                Text("Serving Size")
                     .font(.subheadline)
 
                 Spacer()
 
-                Button {
-                    // This would navigate to settings, but for now just show info
-                } label: {
-                    Text("Change in Settings")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                Picker("Serving Size", selection: Binding(
+                    get: { settingsManager.settings.servingSizeOz },
+                    set: { settingsManager.setServingSize($0) }
+                )) {
+                    ForEach(UserSettings.servingSizePresets, id: \.sizeOz) { preset in
+                        Text(preset.label).tag(preset.sizeOz)
+                    }
                 }
+                .labelsHidden()
+                .pickerStyle(.menu)
             }
             .padding()
             .background(Color(.systemGray6))
@@ -207,11 +215,14 @@ struct BatchScalingView: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(numberOfPeople == count ? .blue : .primary)
+                        .accessibilityLabel("\(count) people")
                     }
 
                     Stepper("", value: $numberOfPeople, in: 1...50)
                         .labelsHidden()
                         .frame(width: 100)
+                        .accessibilityLabel("Number of people")
+                        .accessibilityValue("\(numberOfPeople)")
                 }
             }
 
@@ -234,11 +245,14 @@ struct BatchScalingView: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(servingsPerPerson == count ? .blue : .primary)
+                        .accessibilityLabel("\(count) servings per person")
                     }
 
                     Stepper("", value: $servingsPerPerson, in: 1...10)
                         .labelsHidden()
                         .frame(width: 100)
+                        .accessibilityLabel("Servings per person")
+                        .accessibilityValue("\(servingsPerPerson)")
                 }
             }
         }
@@ -340,25 +354,46 @@ struct BatchScalingView: View {
             return
         }
 
-        let scaleFactor = targetSizeOz / currentTotal
+        // Use the same lock-aware scaler that Apply uses so preview matches result
+        let scaled = calculator.scaleRecipe(
+            recipe,
+            toBatchSize: targetSizeOz,
+            ingredientLookup: database.lookupFunction()
+        )
 
-        // Build ingredient changes
         var changes: [ScalingResult.IngredientScaleChange] = []
-        for ingredient in recipe.ingredients {
+        for (index, ingredient) in recipe.ingredients.enumerated() {
+            guard index < scaled.ingredients.count else { continue }
+            let scaledIngredient = scaled.ingredients[index]
             if let dbIngredient = database.ingredient(for: ingredient.ingredientId) {
                 changes.append(ScalingResult.IngredientScaleChange(
-                    ingredientName: dbIngredient.name,
+                    ingredientName: dbIngredient.name + (ingredient.isLocked ? " (locked)" : ""),
                     originalAmount: ingredient.amount,
-                    scaledAmount: ingredient.amount * scaleFactor,
+                    scaledAmount: scaledIngredient.amount,
                     unit: ingredient.unit
                 ))
             }
         }
 
+        let lockedVolumeOz = recipe.ingredients
+            .filter(\.isLocked)
+            .reduce(0.0) { $0 + $1.volumeInOz }
+        let unlockedVolumeOz = currentTotal - lockedVolumeOz
+
+        // When locks are present, the meaningful factor is how unlocked ingredients scale
+        let effectiveFactor: Double
+        if lockedVolumeOz > 0, unlockedVolumeOz > 0 {
+            effectiveFactor = max(0, targetSizeOz - lockedVolumeOz) / unlockedVolumeOz
+        } else if currentTotal > 0 {
+            effectiveFactor = targetSizeOz / currentTotal
+        } else {
+            effectiveFactor = 1
+        }
+
         scalingResult = ScalingResult(
             originalBatchSize: currentTotal,
             targetBatchSize: targetSizeOz,
-            scaleFactor: scaleFactor,
+            scaleFactor: effectiveFactor,
             ingredientChanges: changes,
             displayUnit: selectedUnit
         )
@@ -415,7 +450,7 @@ struct BatchScalingView: View {
                 }
             }
 
-            if let result = scalingResult, result.scaleFactor != 1.0 {
+            if let result = scalingResult, abs(result.scaleFactor - 1.0) >= 0.001 {
                 HStack {
                     Image(systemName: result.scaleFactor > 1.0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                         .foregroundStyle(result.scaleFactor > 1.0 ? .green : .orange)
@@ -572,7 +607,19 @@ struct BatchScalingView: View {
 
     private func applyScaleFactor(_ factor: Double) {
         let currentTotal = recipe.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
-        let newSize = currentTotal * factor
+        let lockedVolume = recipe.ingredients
+            .filter(\.isLocked)
+            .reduce(0.0) { $0 + $1.volumeInOz }
+        let unlockedVolume = currentTotal - lockedVolume
+
+        // With locks, factor applies to unlocked volume only so "2x" means double unlocked
+        let newSize: Double
+        if lockedVolume > 0, unlockedVolume > 0 {
+            newSize = lockedVolume + unlockedVolume * factor
+        } else {
+            newSize = currentTotal * factor
+        }
+
         let displayValue = MeasurementUnit.oz.convert(newSize, to: selectedUnit)
         targetSizeInput = formatForUnit(displayValue, unit: selectedUnit)
         calculatePreview()
@@ -591,7 +638,7 @@ struct BatchScalingView: View {
     }
 
     private func applyScaling() {
-        guard let result = scalingResult, result.scaleFactor != 1.0 else { return }
+        guard let result = scalingResult, abs(result.scaleFactor - 1.0) >= 0.001 else { return }
 
         let scaledRecipe = calculator.scaleRecipe(
             recipe,

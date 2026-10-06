@@ -7,6 +7,7 @@ public struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(UserSettingsManager.self) private var settingsManager
+    @Environment(RecipeStore.self) private var recipeStore
 
     @State private var showingResetConfirmation = false
     @State private var showingDeleteDataConfirmation = false
@@ -51,6 +52,21 @@ public struct SettingsView: View {
             .sheet(isPresented: $showingAbout) {
                 AboutView()
             }
+            .onDisappear {
+                recipeStore.syncFromUserSettings(settingsManager.settings)
+            }
+            .onChange(of: settingsManager.settings.defaultBatchSize) { _, _ in
+                recipeStore.syncFromUserSettings(settingsManager.settings)
+            }
+            .onChange(of: settingsManager.settings.preferredUnit) { _, _ in
+                recipeStore.syncFromUserSettings(settingsManager.settings)
+            }
+            .onChange(of: settingsManager.settings.machineModel) { _, _ in
+                recipeStore.syncFromUserSettings(settingsManager.settings)
+            }
+            .onChange(of: settingsManager.settings.servingSizeOz) { _, _ in
+                recipeStore.syncFromUserSettings(settingsManager.settings)
+            }
         }
     }
 
@@ -58,7 +74,7 @@ public struct SettingsView: View {
 
     private var defaultsSection: some View {
         Section {
-            // Default Batch Size
+            // Default Batch Size — stored in ounces, edited in preferred unit
             HStack {
                 Text("Default Batch Size")
 
@@ -67,14 +83,22 @@ public struct SettingsView: View {
                 TextField(
                     "Size",
                     value: Binding(
-                        get: { settingsManager.settings.defaultBatchSize },
-                        set: { settingsManager.setDefaultBatchSize($0) }
+                        get: {
+                            MeasurementUnit.oz.convert(
+                                settingsManager.settings.defaultBatchSize,
+                                to: settingsManager.settings.preferredUnit
+                            )
+                        },
+                        set: { displayValue in
+                            let oz = settingsManager.settings.preferredUnit.convert(displayValue, to: .oz)
+                            settingsManager.setDefaultBatchSize(oz)
+                        }
                     ),
-                    format: .number.precision(.fractionLength(0))
+                    format: .number.precision(.fractionLength(0...1))
                 )
-                .keyboardType(.numberPad)
+                .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
-                .frame(width: 60)
+                .frame(width: 70)
 
                 Text(settingsManager.settings.preferredUnit.abbreviation)
                     .foregroundStyle(.secondary)
@@ -92,7 +116,7 @@ public struct SettingsView: View {
         } header: {
             Text("Recipe Defaults")
         } footer: {
-            Text("These settings will be used for new recipes.")
+            Text("These settings will be used for new recipes. Batch size is stored in ounces and shown in your preferred unit.")
         }
     }
 
@@ -243,6 +267,7 @@ public struct SettingsView: View {
         do {
             try modelContext.delete(model: SavedRecipe.self)
             try modelContext.save()
+            recipeStore.configure(with: modelContext)
         } catch {
             print("Failed to delete saved recipes: \(error)")
         }
@@ -304,7 +329,7 @@ struct AboutView: View {
                             ScienceRow(
                                 icon: "drop.fill",
                                 title: "Brix",
-                                description: "Sugar content (aim for 13-15)"
+                                description: "Sugar estimate (aim near 13–15, ABV-adjusted)"
                             )
 
                             ScienceRow(
@@ -398,4 +423,5 @@ struct ScienceRow: View {
 #Preview {
     SettingsView()
         .environment(UserSettingsManager.shared)
+        .environment(RecipeStore())
 }

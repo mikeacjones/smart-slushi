@@ -32,9 +32,11 @@ struct ShoppingItem: Identifiable {
 @available(iOS 17.0, *)
 public struct RecipeOutputView: View {
     @Environment(IngredientDatabase.self) private var database
+    @Environment(UserSettingsManager.self) private var settingsManager
     @Environment(\.dismiss) private var dismiss
 
     let recipe: Recipe
+    let onImportRecipe: ((Recipe) -> Void)?
 
     @State private var selectedTab: OutputTab = .shoppingList
     @State private var shoppingItems: [IngredientCategory: [ShoppingItem]] = [:]
@@ -42,12 +44,14 @@ public struct RecipeOutputView: View {
     @State private var shareContent: String = ""
     @State private var showingExportOptions = false
     @State private var showingCopyConfirmation = false
+    @State private var confirmationMessage = "Recipe copied to clipboard"
 
     private let calculator = SlushCalculator()
     private let serializer = RecipeSerializer()
 
-    public init(recipe: Recipe) {
+    public init(recipe: Recipe, onImportRecipe: ((Recipe) -> Void)? = nil) {
         self.recipe = recipe
+        self.onImportRecipe = onImportRecipe
     }
 
     public var body: some View {
@@ -94,7 +98,7 @@ public struct RecipeOutputView: View {
             .alert("Copied!", isPresented: $showingCopyConfirmation) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text("Recipe copied to clipboard")
+                Text(confirmationMessage)
             }
         }
     }
@@ -293,11 +297,18 @@ public struct RecipeOutputView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Pour the mixture into your Ninja Slushi barrel.")
 
-                        if stats.totalVolumeOz > 72 {
+                        if stats.totalVolumeOz > settingsManager.settings.machineModel.totalCapacity {
                             HStack {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .foregroundStyle(.orange)
-                                Text("This batch exceeds 72oz. You may need to make in batches.")
+                                Text("This batch exceeds \(Int(settingsManager.settings.machineModel.totalCapacity))oz (\(settingsManager.settings.machineModel.displayName)). You may need to make multiple batches.")
+                            }
+                            .font(.callout)
+                        } else if stats.totalVolumeOz > settingsManager.settings.machineModel.workingCapacity {
+                            HStack {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundStyle(.blue)
+                                Text("Above the recommended \(Int(settingsManager.settings.machineModel.workingCapacity))oz working capacity. Leave headroom for expansion while freezing.")
                             }
                             .font(.callout)
                         }
@@ -404,8 +415,8 @@ public struct RecipeOutputView: View {
                 tipRow("If too icy, let it sit 5 minutes and remix")
                 tipRow("If too soft, run another freeze cycle")
 
-                if stats.finalBrix < 14 {
-                    tipRow("Lower sugar content may result in icier texture")
+                if stats.finalBrix < calculator.optimalBrixRange(forABV: stats.finalABV).lowerBound {
+                    tipRow("Sugar is below the optimal range for this ABV — texture may be icier")
                 }
 
                 if stats.finalABV > 8 {
@@ -585,6 +596,7 @@ public struct RecipeOutputView: View {
             ingredientLookup: database.lookupFunction()
         )
         UIPasteboard.general.string = text
+        confirmationMessage = "Recipe copied to clipboard"
         showingCopyConfirmation = true
 
         let generator = UINotificationFeedbackGenerator()
@@ -597,6 +609,7 @@ public struct RecipeOutputView: View {
             ingredientLookup: database.lookupFunction()
         )
         UIPasteboard.general.string = text
+        confirmationMessage = "Recipe copied to clipboard"
         showingCopyConfirmation = true
 
         let generator = UINotificationFeedbackGenerator()
@@ -618,6 +631,7 @@ public struct RecipeOutputView: View {
                 ingredientLookup: database.lookupFunction()
             )
             UIPasteboard.general.string = json
+            confirmationMessage = "Recipe copied to clipboard"
             showingCopyConfirmation = true
 
             let generator = UINotificationFeedbackGenerator()
@@ -628,14 +642,25 @@ public struct RecipeOutputView: View {
     }
 
     private func importFromClipboard() {
-        guard let clipboardContent = UIPasteboard.general.string else { return }
+        guard let clipboardContent = UIPasteboard.general.string, !clipboardContent.isEmpty else {
+            confirmationMessage = "Clipboard is empty — copy a recipe JSON first."
+            showingCopyConfirmation = true
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.error)
+            return
+        }
 
         do {
-            _ = try serializer.importFromJSON(clipboardContent, ingredientDatabase: database)
-            // Note: In a full implementation, you would pass this back to the parent view
+            let importedRecipe = try serializer.importFromJSON(clipboardContent, ingredientDatabase: database)
+            onImportRecipe?(importedRecipe)
+            confirmationMessage = "Recipe imported successfully"
+            showingCopyConfirmation = true
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
+            dismiss()
         } catch {
+            confirmationMessage = "Couldn't import recipe. Check that the clipboard has valid Smart Slushi JSON."
+            showingCopyConfirmation = true
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.error)
         }
@@ -661,13 +686,21 @@ public struct RecipeOutputView: View {
     private func calculateStats() -> RecipeStats {
         calculator.calculateStats(
             for: recipe.ingredients,
-            ingredientLookup: database.lookupFunction()
+            ingredientLookup: database.lookupFunction(),
+            servingSizeOz: settingsManager.settings.servingSizeOz
         )
     }
 
     private func formatBatchSize() -> String {
-        let volume = recipe.targetBatchSize
         let unit = recipe.targetUnit
+        // Prefer actual ingredient volume when the recipe has contents
+        let volumeOz: Double
+        if recipe.ingredients.isEmpty {
+            volumeOz = recipe.targetBatchSize
+        } else {
+            volumeOz = recipe.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
+        }
+        let volume = MeasurementUnit.oz.convert(volumeOz, to: unit)
 
         switch unit {
         case .ml:
@@ -675,7 +708,7 @@ public struct RecipeOutputView: View {
         case .cup:
             return String(format: "%.1f cups", volume)
         default:
-            return "\(Int(volume)) oz"
+            return "\(Int(volume.rounded())) oz"
         }
     }
 
@@ -688,8 +721,9 @@ public struct RecipeOutputView: View {
     }
 
     private func estimateFreezeTime(stats: RecipeStats) -> String {
-        // Base time on volume and ABV
-        let volumeFactor = stats.totalVolumeOz / 72.0  // Normalized to standard batch
+        // Base time on volume and ABV relative to the user's machine capacity
+        let capacity = max(1, settingsManager.settings.machineModel.workingCapacity)
+        let volumeFactor = stats.totalVolumeOz / capacity
         let abvFactor = 1.0 + (stats.finalABV / 20.0)  // Higher ABV = longer time
 
         let baseMinutes = 20.0
@@ -721,6 +755,10 @@ struct ShoppingItemRow: View {
                     .font(.title3)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(item.ingredient.name)
+            .accessibilityValue(isChecked ? "Checked" : "Unchecked")
+            .accessibilityHint("Marks shopping list item")
+            .accessibilityAddTraits(.isButton)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.ingredient.name)
@@ -808,4 +846,5 @@ struct ShareSheet: UIViewControllerRepresentable {
 #Preview {
     RecipeOutputView(recipe: Recipe(name: "Preview Recipe"))
         .environment(IngredientDatabase.shared)
+        .environment(UserSettingsManager.shared)
 }
