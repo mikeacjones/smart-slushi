@@ -177,6 +177,8 @@ public final class SlushCalculator: Sendable {
     // MARK: - Scaling
 
     /// Scale a recipe to a target batch size
+    /// Locked ingredients keep their absolute amounts; unlocked ingredients
+    /// absorb the remaining volume so ratios among unlocked items stay intact.
     /// - Parameters:
     ///   - recipe: The recipe to scale
     ///   - targetSize: Target batch size in ounces
@@ -187,14 +189,27 @@ public final class SlushCalculator: Sendable {
         toBatchSize targetSize: Double,
         ingredientLookup: (UUID) -> Ingredient?
     ) -> Recipe {
-        // Calculate current total volume
         let currentTotal = recipe.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
         guard currentTotal > 0 else { return recipe }
 
-        let scaleFactor = targetSize / currentTotal
+        let lockedVolumeOz = recipe.ingredients
+            .filter(\.isLocked)
+            .reduce(0.0) { $0 + $1.volumeInOz }
+        let unlockedVolumeOz = currentTotal - lockedVolumeOz
 
-        // Scale all ingredients
+        // If everything is locked, or locked volume already meets/exceeds target, leave as-is
+        guard unlockedVolumeOz > 0 else {
+            var unchanged = recipe
+            unchanged.targetBatchSize = currentTotal
+            unchanged.modifiedAt = Date()
+            return unchanged
+        }
+
+        let targetUnlockedOz = max(0, targetSize - lockedVolumeOz)
+        let scaleFactor = targetUnlockedOz / unlockedVolumeOz
+
         let scaledIngredients = recipe.ingredients.map { ingredient -> RecipeIngredient in
+            guard !ingredient.isLocked else { return ingredient }
             var scaled = ingredient
             scaled.amount = ingredient.amount * scaleFactor
             return scaled
@@ -468,13 +483,23 @@ public final class RecipeOptimizer: Sendable {
         var updatedRecipe = recipe
 
         // Amount is always computed in ounces — convert when topping up an existing row
-        if let index = updatedRecipe.ingredients.firstIndex(where: { $0.ingredientId == ingredientId }) {
+        if let index = updatedRecipe.ingredients.firstIndex(where: {
+            $0.ingredientId == ingredientId && !$0.isLocked
+        }) {
             let existing = updatedRecipe.ingredients[index]
-            // Never adjust locked ingredients
-            guard !existing.isLocked else { return updatedRecipe }
-
             let amountInExistingUnit = MeasurementUnit.oz.convert(amount, to: existing.unit)
             updatedRecipe.ingredients[index].amount += amountInExistingUnit
+        } else if updatedRecipe.ingredients.contains(where: {
+            $0.ingredientId == ingredientId && $0.isLocked
+        }) {
+            // Preferred balancer is locked — add a separate unlocked row so balancing can proceed
+            let newIngredient = RecipeIngredient(
+                ingredientId: ingredientId,
+                amount: amount,
+                unit: .oz,
+                isLocked: false
+            )
+            updatedRecipe.ingredients.append(newIngredient)
         } else {
             // Add new ingredient in ounces (matching calculation units)
             let newIngredient = RecipeIngredient(

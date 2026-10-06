@@ -415,8 +415,8 @@ public struct RecipeOutputView: View {
                 tipRow("If too icy, let it sit 5 minutes and remix")
                 tipRow("If too soft, run another freeze cycle")
 
-                if stats.finalBrix < 14 {
-                    tipRow("Lower sugar content may result in icier texture")
+                if stats.finalBrix < calculator.optimalBrixRange(forABV: stats.finalABV).lowerBound {
+                    tipRow("Sugar is below the optimal range for this ABV — texture may be icier")
                 }
 
                 if stats.finalABV > 8 {

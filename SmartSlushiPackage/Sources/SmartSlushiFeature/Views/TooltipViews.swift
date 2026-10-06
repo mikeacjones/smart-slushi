@@ -41,25 +41,25 @@ enum TooltipContent: String, CaseIterable, Identifiable {
     var explanation: String {
         switch self {
         case .brix:
-            return "Brix measures the sugar content of your drink as a percentage by weight. For perfect slush texture, aim for 13-15 Brix."
+            return "Brix estimates sugar content from your ingredient volumes. For home slush machines, aim near 13–15 Brix (adjusted slightly lower as ABV rises)."
 
         case .abv:
-            return "ABV (Alcohol By Volume) measures the alcohol percentage. Keep it under 10% for proper freezing—higher alcohol prevents slush formation."
+            return "ABV (Alcohol By Volume) measures the alcohol percentage. Keep it at or under 10% for proper freezing—higher alcohol prevents slush formation."
 
         case .slushability:
-            return "Slushability indicates whether your recipe will freeze properly. A balanced recipe needs the right combination of sugar and alcohol."
+            return "Slushability indicates whether your recipe will freeze properly. A balanced recipe needs the right combination of sugar and alcohol for your ABV."
 
         case .freezingPoint:
-            return "Alcohol lowers the freezing point. Your Ninja Slushi operates around -6°C to -10°C. If the freezing point is too low, it won't freeze."
+            return "Alcohol lowers the freezing point. Your Ninja Slushi barrel runs about −6°C to −10°C. Keep the drink’s freezing point above about −9°C so it can still form slush."
         }
     }
 
     var targetRange: String {
         switch self {
-        case .brix: return "Target: 13-15 Brix"
-        case .abv: return "Target: 0-10% ABV"
+        case .brix: return "Target: ~13–15 Brix (ABV-adjusted)"
+        case .abv: return "Target: 0–10% ABV"
         case .slushability: return "Optimal when green"
-        case .freezingPoint: return "Above -9°C"
+        case .freezingPoint: return "Keep FP ≥ about −9°C"
         }
     }
 
@@ -69,7 +69,8 @@ enum TooltipContent: String, CaseIterable, Identifiable {
             return [
                 "Too low = icy/hard texture",
                 "Too high = soupy/won't freeze",
-                "Cold suppresses sweetness—frozen drinks need more sugar than cocktails"
+                "Cold suppresses sweetness—frozen drinks need more sugar than cocktails",
+                "Higher ABV recipes work better with slightly lower Brix"
             ]
 
         case .abv:
@@ -88,9 +89,9 @@ enum TooltipContent: String, CaseIterable, Identifiable {
 
         case .freezingPoint:
             return [
-                "Formula: -0.4°C × ABV% (≈ 32 − 0.72×ABV °F)",
-                "10% ABV = -4°C / 24.8°F freezing point",
-                "Lower = harder to freeze"
+                "Formula: −0.4°C × ABV% (≈ 32 − 0.72×ABV °F)",
+                "10% ABV = −4°C / 24.8°F freezing point",
+                "Lower freezing point = harder to freeze"
             ]
         }
     }

@@ -147,6 +147,11 @@ struct BatchScalingView: View {
                     calculateServingsPreview()
                 }
             }
+            .onChange(of: settingsManager.settings.servingSizeOz) { _, _ in
+                if scalingMode == .byServings {
+                    calculateServingsPreview()
+                }
+            }
         }
         .presentationDetents([.medium, .large])
     }

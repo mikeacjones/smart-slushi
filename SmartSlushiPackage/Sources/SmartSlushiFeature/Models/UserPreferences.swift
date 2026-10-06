@@ -146,7 +146,7 @@ public struct UserSettings: Codable, Sendable {
     public var servingSizeOz: Double
 
     public init(
-        defaultBatchSize: Double = 72,
+        defaultBatchSize: Double = 64,
         preferredUnit: MeasurementUnit = .oz,
         machineModel: NinjaSlushiModel = .standard72oz,
         drinkPreferences: DrinkPreferences = .balanced,

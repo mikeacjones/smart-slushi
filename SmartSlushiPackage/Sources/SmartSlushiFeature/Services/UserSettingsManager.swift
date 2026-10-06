@@ -31,9 +31,13 @@ public final class UserSettingsManager: Sendable {
         settings.preferredUnit = unit
     }
 
-    /// Update the machine model
+    /// Update the machine model and align default batch with working capacity
     public func setMachineModel(_ model: NinjaSlushiModel) {
         settings.machineModel = model
+        // Keep default batch within the new machine's working capacity when still at the previous default
+        if settings.defaultBatchSize > model.workingCapacity {
+            settings.defaultBatchSize = model.workingCapacity
+        }
     }
 
     /// Update the default drink preferences

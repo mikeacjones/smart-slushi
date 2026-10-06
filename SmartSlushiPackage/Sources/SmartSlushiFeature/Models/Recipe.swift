@@ -223,7 +223,7 @@ public struct Recipe: Identifiable, Codable, Sendable {
         description: String? = nil,
         baseRecipeId: UUID? = nil,
         ingredients: [RecipeIngredient] = [],
-        targetBatchSize: Double = 72,
+        targetBatchSize: Double = 64,
         targetUnit: MeasurementUnit = .oz,
         createdAt: Date = Date(),
         modifiedAt: Date = Date()
@@ -288,7 +288,7 @@ public struct RecipeTemplate: Identifiable, Codable, Sendable {
     }
 
     /// Create a new Recipe instance from this template
-    public func createRecipe(targetBatchSize: Double = 72) -> Recipe {
+    public func createRecipe(targetBatchSize: Double = 64) -> Recipe {
         let baseVolumeOz = baseIngredients.reduce(0.0) { partialResult, ingredient in
             partialResult + ingredient.volumeInOz
         }

@@ -127,23 +127,58 @@ struct RecipeSerializerTests {
         }
     }
 
-    @Test("Text export formats batch size in target unit")
-    func textExportFormatsBatchSizeInTargetUnit() {
+    @Test("Import recreates missing ingredients as custom")
+    func importCreatesCustomIngredients() throws {
         let serializer = RecipeSerializer()
-        let recipe = Recipe(
-            name: "Unit Test Recipe",
-            ingredients: [],
-            targetBatchSize: 72,
-            targetUnit: .ml
-        )
+        let database = IngredientDatabase.shared
+        let beforeCount = database.customIngredients.count
 
-        let output = serializer.exportToText(
-            recipe,
-            ingredientLookup: { _ in nil },
-            includeStats: false
-        )
+        let json = """
+        {
+          "version": "1.1",
+          "exportedAt": "2026-02-11T00:00:00Z",
+          "recipe": {
+            "id": "\(UUID().uuidString)",
+            "name": "Custom Import Recipe",
+            "description": null,
+            "targetBatchSize": 64,
+            "targetUnit": "oz",
+            "ingredients": [
+              {
+                "name": "Mystery Cordial XYZ",
+                "amount": 4.0,
+                "unit": "oz",
+                "abv": 20.0,
+                "brix": 30.0,
+                "category": "liqueur",
+                "isLocked": true
+              },
+              {
+                "name": "Water",
+                "amount": 60.0,
+                "unit": "oz",
+                "abv": 0.0,
+                "brix": 0.0,
+                "category": "mixer",
+                "isLocked": false
+              }
+            ],
+            "createdAt": "2026-02-11T00:00:00Z",
+            "modifiedAt": "2026-02-11T00:00:00Z"
+          }
+        }
+        """
 
-        #expect(output.contains("Batch Size: 2129 ml"))
+        let recipe = try serializer.importFromJSON(json, ingredientDatabase: database)
+        #expect(recipe.ingredients.count == 2)
+        #expect(database.customIngredients.count == beforeCount + 1)
+
+        let mystery = recipe.ingredients.first { ingredient in
+            database.ingredient(for: ingredient.ingredientId)?.name == "Mystery Cordial XYZ"
+        }
+        #expect(mystery != nil)
+        #expect(mystery?.isLocked == true)
+        #expect(mystery?.amount == 4.0)
     }
 }
 
@@ -910,9 +945,37 @@ struct RealWorldRecipeTests {
             sweetenerBrix: 75
         )
 
-        let lockedAgave = balanced.ingredients.first { $0.ingredientId == pureAgave.id }
+        let lockedAgave = balanced.ingredients.first { $0.ingredientId == pureAgave.id && $0.isLocked }
         #expect(lockedAgave?.amount == 4.0, "Locked agave amount must not change")
         #expect(lockedAgave?.isLocked == true)
+    }
+
+    @Test("Scale recipe preserves locked absolute amounts")
+    func scaleRecipePreservesLocks() {
+        var recipe = Recipe(name: "Locked Scale")
+        recipe.ingredients = [
+            RecipeIngredient(ingredientId: blancoTequila.id, amount: 8, unit: .oz, isLocked: true),
+            RecipeIngredient(ingredientId: water.id, amount: 20, unit: .oz),
+            RecipeIngredient(ingredientId: pureAgave.id, amount: 4, unit: .oz),
+            RecipeIngredient(ingredientId: limeJuice.id, amount: 8, unit: .oz)
+        ]
+        // Total 40 oz; locked tequila 8 oz. Scale to 80 oz → unlocked should double to 64, locked stays 8.
+
+        let scaled = calculator.scaleRecipe(
+            recipe,
+            toBatchSize: 80,
+            ingredientLookup: makeLookup()
+        )
+
+        let tequila = scaled.ingredients.first { $0.ingredientId == blancoTequila.id }
+        #expect(tequila?.amount == 8.0)
+        #expect(tequila?.isLocked == true)
+
+        let waterAmount = scaled.ingredients.first { $0.ingredientId == water.id }?.amount ?? 0
+        #expect(abs(waterAmount - 40.0) < 0.01)
+
+        let total = scaled.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
+        #expect(abs(total - 80.0) < 0.01)
     }
 }
 

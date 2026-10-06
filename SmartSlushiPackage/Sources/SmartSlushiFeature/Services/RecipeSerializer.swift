@@ -57,9 +57,28 @@ public struct ExportableRecipe: Codable, Sendable {
         public let abv: Double
         public let brix: Double
         public let category: String
+        public let isLocked: Bool?
+
+        public init(
+            name: String,
+            amount: Double,
+            unit: String,
+            abv: Double,
+            brix: Double,
+            category: String,
+            isLocked: Bool? = false
+        ) {
+            self.name = name
+            self.amount = amount
+            self.unit = unit
+            self.abv = abv
+            self.brix = brix
+            self.category = category
+            self.isLocked = isLocked
+        }
     }
 
-    public static let currentVersion = "1.0"
+    public static let currentVersion = "1.1"
 }
 
 // MARK: - Recipe Serializer
@@ -230,7 +249,9 @@ public final class RecipeSerializer: Sendable {
         decoder.dateDecodingStrategy = .iso8601
 
         let exportable = try decoder.decode(ExportableRecipe.self, from: data)
-        guard exportable.version == ExportableRecipe.currentVersion else {
+        // Accept current and prior 1.x exports
+        let supportedVersions: Set<String> = ["1.0", "1.1", ExportableRecipe.currentVersion]
+        guard supportedVersions.contains(exportable.version) else {
             throw RecipeSerializerError.versionMismatch(exportable.version)
         }
         return try createRecipe(from: exportable, ingredientDatabase: ingredientDatabase)
@@ -251,7 +272,8 @@ public final class RecipeSerializer: Sendable {
                 unit: recipeIngredient.unit.rawValue,
                 abv: ingredient.abv,
                 brix: ingredient.brix,
-                category: ingredient.category.rawValue
+                category: ingredient.category.rawValue,
+                isLocked: recipeIngredient.isLocked
             )
         }
 
@@ -281,23 +303,44 @@ public final class RecipeSerializer: Sendable {
         var unmatchedIngredients: [String] = []
 
         for ingredientData in exportable.recipe.ingredients {
-            // Try to find matching ingredient by name
+            let unit = MeasurementUnit(rawValue: ingredientData.unit) ?? .oz
+            let isLocked = ingredientData.isLocked ?? false
+
+            // Prefer exact name match in the local database
             if let matchingIngredient = ingredientDatabase.search(ingredientData.name).first(where: {
                 $0.name.lowercased() == ingredientData.name.lowercased()
             }) {
-                let unit = MeasurementUnit(rawValue: ingredientData.unit) ?? .oz
                 let recipeIngredient = RecipeIngredient(
                     ingredientId: matchingIngredient.id,
                     amount: ingredientData.amount,
-                    unit: unit
+                    unit: unit,
+                    isLocked: isLocked
                 )
                 recipeIngredients.append(recipeIngredient)
             } else {
+                // Recreate missing ingredients as custom entries so imports stay complete
+                let category = IngredientCategory(rawValue: ingredientData.category) ?? .misc
+                let custom = Ingredient(
+                    name: ingredientData.name,
+                    category: category,
+                    abv: ingredientData.abv,
+                    brix: ingredientData.brix,
+                    defaultUnit: unit,
+                    isCustom: true,
+                    notes: "Imported with recipe"
+                )
+                ingredientDatabase.addCustomIngredient(custom)
                 unmatchedIngredients.append(ingredientData.name)
+
+                recipeIngredients.append(RecipeIngredient(
+                    ingredientId: custom.id,
+                    amount: ingredientData.amount,
+                    unit: unit,
+                    isLocked: isLocked
+                ))
             }
         }
 
-        // If we couldn't match any ingredients, that's an error
         if recipeIngredients.isEmpty && !exportable.recipe.ingredients.isEmpty {
             throw RecipeSerializerError.noMatchingIngredients(unmatchedIngredients)
         }

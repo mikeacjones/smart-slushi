@@ -149,7 +149,7 @@ public struct PublishRecipeSheet: View {
             HStack(spacing: 16) {
                 statItem(title: "ABV", value: String(format: "%.1f%%", stats.finalABV))
                 statItem(title: "Brix", value: String(format: "%.1f", stats.finalBrix))
-                statItem(title: "Batch", value: "\(Int(recipe?.targetBatchSize ?? savedRecipe?.targetBatchSize ?? 72)) oz")
+                statItem(title: "Batch", value: formattedBatchSize)
             }
             .frame(maxWidth: .infinity)
             .padding()
@@ -168,6 +168,20 @@ public struct PublishRecipeSheet: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var formattedBatchSize: String {
+        let sizeOz = recipe?.targetBatchSize ?? savedRecipe?.targetBatchSize ?? 72
+        let unit = recipe?.targetUnit ?? savedRecipe?.targetUnit ?? .oz
+        let converted = MeasurementUnit.oz.convert(sizeOz, to: unit)
+        switch unit {
+        case .ml:
+            return "\(Int(converted.rounded())) \(unit.abbreviation)"
+        case .cup:
+            return String(format: "%.1f %@", converted, unit.abbreviation)
+        default:
+            return "\(Int(converted.rounded())) \(unit.abbreviation)"
+        }
     }
 
     // MARK: - Ingredients Preview Section
