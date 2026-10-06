@@ -69,6 +69,8 @@ public struct RecipeBuilderView: View {
     @State private var showingPublishSheet = false
     @State private var pendingLoadedRecipe: Recipe?
     @State private var hasAppliedInitialDefaults = false
+    /// Skip ingredient scaling when `batchSizeInput` is written programmatically (rounding would otherwise re-scale).
+    @State private var suppressBatchSizeInputHandler = false
 
     private let calculator = SlushCalculator()
     private let optimizer = RecipeOptimizer()
@@ -200,7 +202,7 @@ public struct RecipeBuilderView: View {
                     withAnimation {
                         recipe = importedRecipe
                         displayUnit = recipe.targetUnit
-                        batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
+                        writeBatchSizeInput(formatBatchSize(recipe.targetBatchSize, for: displayUnit))
                     }
                 }
             }
@@ -215,7 +217,7 @@ public struct RecipeBuilderView: View {
                 ) { scaledRecipe in
                     withAnimation {
                         recipe = scaledRecipe
-                        batchSizeInput = formatBatchSize(scaledRecipe.targetBatchSize, for: displayUnit)
+                        writeBatchSizeInput(formatBatchSize(scaledRecipe.targetBatchSize, for: displayUnit))
                     }
                 }
                 .environment(database)
@@ -226,7 +228,7 @@ public struct RecipeBuilderView: View {
                     withAnimation {
                         recipe = importedRecipe
                         displayUnit = recipe.targetUnit
-                        batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
+                        writeBatchSizeInput(formatBatchSize(recipe.targetBatchSize, for: displayUnit))
                     }
                 }
                 .environment(sharedRecipeStore)
@@ -270,6 +272,10 @@ public struct RecipeBuilderView: View {
                     .accessibilityLabel("Batch size")
                     .accessibilityValue("\(batchSizeInput) \(displayUnit.abbreviation)")
                     .onChange(of: batchSizeInput) { _, newValue in
+                        if suppressBatchSizeInputHandler {
+                            suppressBatchSizeInputHandler = false
+                            return
+                        }
                         updateBatchSize(from: newValue)
                     }
 
@@ -322,17 +328,31 @@ public struct RecipeBuilderView: View {
     }
 
     private func convertBatchSize(from oldUnit: MeasurementUnit, to newUnit: MeasurementUnit) {
-        guard let currentValue = Double(batchSizeInput), currentValue > 0 else { return }
-        let convertedValue = oldUnit.convert(currentValue, to: newUnit)
-        // Format based on unit - ml uses whole numbers, oz and cups use decimals
-        if newUnit == .ml {
-            batchSizeInput = String(format: "%.0f", convertedValue)
-        } else if newUnit == .cup {
-            batchSizeInput = String(format: "%.1f", convertedValue)
-        } else {
-            batchSizeInput = String(format: "%.0f", convertedValue)
+        guard let currentValue = Double(batchSizeInput), currentValue > 0 else {
+            recipe.targetUnit = newUnit
+            return
         }
+        let convertedValue = oldUnit.convert(currentValue, to: newUnit)
+        // Display-only conversion — do not re-scale ingredients via batchSizeInput onChange
+        writeBatchSizeInput(formatForDisplay(convertedValue, unit: newUnit))
         recipe.targetUnit = newUnit
+    }
+
+    /// Format a display-unit amount for the batch size field
+    private func formatForDisplay(_ value: Double, unit: MeasurementUnit) -> String {
+        if unit == .ml {
+            return String(format: "%.0f", value)
+        } else if unit == .cup {
+            return String(format: "%.1f", value)
+        } else {
+            return String(format: "%.0f", value)
+        }
+    }
+
+    /// Write the batch size field without triggering ingredient scaling
+    private func writeBatchSizeInput(_ value: String) {
+        suppressBatchSizeInputHandler = true
+        batchSizeInput = value
     }
 
     // MARK: - Quick Stats Bar
@@ -546,7 +566,7 @@ public struct RecipeBuilderView: View {
         recipe.targetBatchSize = defaultBatchSizeOz
         recipe.targetUnit = preferredUnit
         displayUnit = preferredUnit
-        batchSizeInput = formatBatchSize(defaultBatchSizeOz, for: preferredUnit)
+        writeBatchSizeInput(formatBatchSize(defaultBatchSizeOz, for: preferredUnit))
     }
 
     private func calculateCurrentStats() -> RecipeStats {
@@ -582,7 +602,7 @@ public struct RecipeBuilderView: View {
         let total = recipe.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
         guard total > 0 else { return }
         recipe.targetBatchSize = total
-        batchSizeInput = formatBatchSize(total, for: displayUnit)
+        writeBatchSizeInput(formatBatchSize(total, for: displayUnit))
     }
 
     private func autoBalance() {
