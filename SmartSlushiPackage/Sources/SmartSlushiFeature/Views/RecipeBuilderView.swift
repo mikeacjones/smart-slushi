@@ -30,9 +30,12 @@ struct OptimizationResult: Identifiable {
     }
 
     var wasSuccessful: Bool {
-        afterStats.slushabilityStatus.isOptimal ||
-        (targetBrixRange.contains(afterStats.finalBrix) &&
-         (targetABVRange.contains(afterStats.finalABV) || afterStats.finalABV < targetABVRange.lowerBound))
+        // Never claim success for mixes that will not freeze
+        guard afterStats.slushabilityStatus != .willNotFreeze else { return false }
+        if afterStats.slushabilityStatus.isOptimal { return true }
+        return targetBrixRange.contains(afterStats.finalBrix)
+            && (targetABVRange.contains(afterStats.finalABV)
+                || afterStats.finalABV < targetABVRange.lowerBound)
     }
 }
 
@@ -571,11 +574,15 @@ public struct RecipeBuilderView: View {
         // Capture before stats and original batch size
         let beforeStats = calculateCurrentStats()
         let originalBatchSize = beforeStats.totalVolumeOz
-        let beforeIngredients = Dictionary(
-            uniqueKeysWithValues: recipe.ingredients.map { ($0.ingredientId, $0.amount) }
-        )
+        let hasLockedIngredients = recipe.ingredients.contains(where: \.isLocked)
 
-        // Run optimization
+        // Aggregate amounts by ingredientId (duplicate rows can exist after locked-balancer path)
+        var beforeIngredients: [UUID: Double] = [:]
+        for item in recipe.ingredients {
+            beforeIngredients[item.ingredientId, default: 0] += item.amount
+        }
+
+        // Preference targets clamped to ABV-aware science windows
         let targets = preferences.toOptimizationTargets()
         var balanced = optimizer.autoBalance(
             recipe: recipe,
@@ -586,8 +593,9 @@ public struct RecipeBuilderView: View {
             sweetenerIngredientId: simpleSyrup.id
         )
 
-        // Scale back to original batch size to maintain volume while preserving optimized ratios
-        if originalBatchSize > 0 {
+        // Scale back only when nothing is locked — lock-aware scale-back would
+        // squeeze out added water/sweetener and undo dilution.
+        if originalBatchSize > 0 && !hasLockedIngredients {
             balanced = calculator.scaleRecipe(
                 balanced,
                 toBatchSize: originalBatchSize,
@@ -595,25 +603,39 @@ public struct RecipeBuilderView: View {
             )
         }
 
-        // Calculate after stats (now at original batch size with optimized ratios)
+        // Keep batch size metadata aligned with actual volume
+        let balancedVolume = balanced.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
+        if balancedVolume > 0 {
+            balanced.targetBatchSize = balancedVolume
+        }
+
+        // Calculate after stats
         let afterStats = calculator.calculateStats(
             for: balanced.ingredients,
-            ingredientLookup: database.lookupFunction()
+            ingredientLookup: database.lookupFunction(),
+            servingSizeOz: settingsManager.settings.servingSizeOz
         )
 
-        // Determine ingredient changes
-        var ingredientChanges: [OptimizationResult.IngredientChange] = []
+        // Determine ingredient changes (summed by ingredientId)
+        var afterAmounts: [UUID: (amount: Double, unit: MeasurementUnit)] = [:]
         for ingredient in balanced.ingredients {
-            let previousAmount = beforeIngredients[ingredient.ingredientId]
-            let ingredientName = database.ingredient(for: ingredient.ingredientId)?.name ?? "Unknown"
+            let existing = afterAmounts[ingredient.ingredientId]
+            afterAmounts[ingredient.ingredientId] = (
+                amount: (existing?.amount ?? 0) + ingredient.amount,
+                unit: ingredient.unit
+            )
+        }
 
-            // Only include if it's new or the amount changed
-            if previousAmount == nil || abs(ingredient.amount - (previousAmount ?? 0)) > 0.01 {
+        var ingredientChanges: [OptimizationResult.IngredientChange] = []
+        for (ingredientId, after) in afterAmounts {
+            let previousAmount = beforeIngredients[ingredientId]
+            let ingredientName = database.ingredient(for: ingredientId)?.name ?? "Unknown"
+            if previousAmount == nil || abs(after.amount - (previousAmount ?? 0)) > 0.01 {
                 ingredientChanges.append(OptimizationResult.IngredientChange(
                     ingredientName: ingredientName,
                     previousAmount: previousAmount,
-                    newAmount: ingredient.amount,
-                    unit: ingredient.unit
+                    newAmount: after.amount,
+                    unit: after.unit
                 ))
             }
         }
@@ -629,6 +651,7 @@ public struct RecipeBuilderView: View {
 
         withAnimation {
             recipe = balanced
+            batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
             isAutoBalancing = false
             optimizationResult = result
 
@@ -779,9 +802,14 @@ struct QuickStatsBar: View {
     }
 
     private var brixStatus: StatStatus {
-        if stats.finalBrix < 11 || stats.finalBrix > 17 { return .bad }
-        if isBrixInTargetRange { return .good }
-        if stats.finalBrix < 13 || stats.finalBrix > 15 { return .warning }
+        let optimal = SlushCalculator().optimalBrixRange(forABV: stats.finalABV)
+        if stats.finalBrix < optimal.lowerBound - 2 || stats.finalBrix > optimal.upperBound + 2 {
+            return .bad
+        }
+        if isBrixInTargetRange || optimal.contains(stats.finalBrix) { return .good }
+        if stats.finalBrix < optimal.lowerBound || stats.finalBrix > optimal.upperBound {
+            return .warning
+        }
         return .neutral
     }
 }
@@ -1172,7 +1200,7 @@ struct OptimizationResultView: View {
                     StatComparisonItem(
                         label: "Brix",
                         value: String(format: "%.1f", result.beforeStats.finalBrix),
-                        status: brixStatus(for: result.beforeStats.finalBrix)
+                        status: brixStatus(for: result.beforeStats.finalBrix, abv: result.beforeStats.finalABV)
                     )
 
                     StatComparisonItem(
@@ -1203,7 +1231,7 @@ struct OptimizationResultView: View {
                     StatComparisonItem(
                         label: "Brix",
                         value: String(format: "%.1f", result.afterStats.finalBrix),
-                        status: brixStatus(for: result.afterStats.finalBrix)
+                        status: brixStatus(for: result.afterStats.finalBrix, abv: result.afterStats.finalABV)
                     )
 
                     StatComparisonItem(
@@ -1317,11 +1345,18 @@ struct OptimizationResultView: View {
         return .neutral
     }
 
-    private func brixStatus(for brix: Double) -> StatStatus {
-        if brix < 11 || brix > 17 { return .bad }
-        if brix < 13 || brix > 15 { return .warning }
-        return .good
+    private func brixStatus(for brix: Double, abv: Double) -> StatStatus {
+        let optimal = CalculatorHolder.shared.optimalBrixRange(forABV: abv)
+        if brix < optimal.lowerBound - 2 || brix > optimal.upperBound + 2 { return .bad }
+        if optimal.contains(brix) { return .good }
+        if brix < optimal.lowerBound || brix > optimal.upperBound { return .warning }
+        return .neutral
     }
+}
+
+/// Shared calculator instance for lightweight status helpers in result views
+private enum CalculatorHolder {
+    static let shared = SlushCalculator()
 }
 
 // MARK: - Stat Comparison Item

@@ -150,7 +150,7 @@
           "unit": "oz"
         },
         {
-          "amount": 3.25,
+          "amount": 3.75,
           "ingredient": "Simple Syrup (1:1 by volume)",
           "scalable": true,
           "unit": "oz"
@@ -166,8 +166,8 @@
       "category": "daiquiri",
       "description": "Simple rum sour, perfect for freezing",
       "expectedStats": {
-        "abv": 6.4,
-        "brix": 13.1
+        "abv": 6.2,
+        "brix": 14.5
       },
       "id": "frozen-daiquiri",
       "name": "Classic Frozen Daiquiri",
@@ -428,7 +428,7 @@
           "unit": "oz"
         },
         {
-          "amount": 3.25,
+          "amount": 3.75,
           "ingredient": "Simple Syrup (1:1 by volume)",
           "notes": "Added for machine-ready balance",
           "scalable": true,
@@ -438,8 +438,8 @@
       "category": "vodka",
       "description": "The iconic pink cocktail, frozen",
       "expectedStats": {
-        "abv": 6.2,
-        "brix": 13.0
+        "abv": 6.0,
+        "brix": 14.2
       },
       "id": "frozen-cosmo",
       "name": "Frozen Cosmopolitan",

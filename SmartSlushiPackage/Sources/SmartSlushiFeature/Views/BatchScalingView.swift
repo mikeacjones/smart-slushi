@@ -348,25 +348,33 @@ struct BatchScalingView: View {
             return
         }
 
-        let scaleFactor = targetSizeOz / currentTotal
+        // Use the same lock-aware scaler that Apply uses so preview matches result
+        let scaled = calculator.scaleRecipe(
+            recipe,
+            toBatchSize: targetSizeOz,
+            ingredientLookup: database.lookupFunction()
+        )
 
-        // Build ingredient changes
         var changes: [ScalingResult.IngredientScaleChange] = []
-        for ingredient in recipe.ingredients {
+        for (index, ingredient) in recipe.ingredients.enumerated() {
+            guard index < scaled.ingredients.count else { continue }
+            let scaledIngredient = scaled.ingredients[index]
             if let dbIngredient = database.ingredient(for: ingredient.ingredientId) {
                 changes.append(ScalingResult.IngredientScaleChange(
-                    ingredientName: dbIngredient.name,
+                    ingredientName: dbIngredient.name + (ingredient.isLocked ? " (locked)" : ""),
                     originalAmount: ingredient.amount,
-                    scaledAmount: ingredient.amount * scaleFactor,
+                    scaledAmount: scaledIngredient.amount,
                     unit: ingredient.unit
                 ))
             }
         }
 
+        let effectiveFactor = currentTotal > 0 ? targetSizeOz / currentTotal : 1
+
         scalingResult = ScalingResult(
             originalBatchSize: currentTotal,
             targetBatchSize: targetSizeOz,
-            scaleFactor: scaleFactor,
+            scaleFactor: effectiveFactor,
             ingredientChanges: changes,
             displayUnit: selectedUnit
         )

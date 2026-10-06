@@ -685,7 +685,14 @@ public struct RecipeOutputView: View {
 
     private func formatBatchSize() -> String {
         let unit = recipe.targetUnit
-        let volume = MeasurementUnit.oz.convert(recipe.targetBatchSize, to: unit)
+        // Prefer actual ingredient volume when the recipe has contents
+        let volumeOz: Double
+        if recipe.ingredients.isEmpty {
+            volumeOz = recipe.targetBatchSize
+        } else {
+            volumeOz = recipe.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
+        }
+        let volume = MeasurementUnit.oz.convert(volumeOz, to: unit)
 
         switch unit {
         case .ml:
@@ -693,7 +700,7 @@ public struct RecipeOutputView: View {
         case .cup:
             return String(format: "%.1f cups", volume)
         default:
-            return "\(Int(volume)) oz"
+            return "\(Int(volume.rounded())) oz"
         }
     }
 

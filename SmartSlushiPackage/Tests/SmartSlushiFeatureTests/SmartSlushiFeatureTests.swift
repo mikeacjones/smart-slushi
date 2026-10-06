@@ -475,9 +475,9 @@ struct DrinkPreferencesTests {
         let prefs = DrinkPreferences.balanced
         let targets = prefs.toOptimizationTargets()
 
-        // Should produce roughly 13.5-14.5 Brix and 7-8% ABV
-        #expect(targets.brixRange.lowerBound >= 13.0)
-        #expect(targets.brixRange.upperBound <= 15.0)
+        // Clamped inside ABV-aware science window (~13.25–15.25 at mid ABV)
+        #expect(targets.brixRange.lowerBound >= 12.5)
+        #expect(targets.brixRange.upperBound <= 16.0)
         #expect(targets.abvRange.lowerBound >= 6.0)
         #expect(targets.abvRange.upperBound <= 9.0)
     }
@@ -485,17 +485,31 @@ struct DrinkPreferencesTests {
     @Test("Tart preferences produce lower Brix")
     func tartPreferences() {
         let prefs = DrinkPreferences(sweetnessLevel: 0.0, slushThickness: 0.5, alcoholStrength: 0.5)
+        let balanced = DrinkPreferences.balanced.toOptimizationTargets()
         let targets = prefs.toOptimizationTargets()
 
-        #expect(targets.brixRange.lowerBound <= 13.0, "Tart preference should have lower Brix target")
+        #expect(targets.brixRange.lowerBound <= balanced.brixRange.lowerBound + 0.01, "Tart preference should have lower-or-equal Brix target")
     }
 
     @Test("Sweet preferences produce higher Brix")
     func sweetPreferences() {
         let prefs = DrinkPreferences(sweetnessLevel: 1.0, slushThickness: 0.5, alcoholStrength: 0.5)
+        let balanced = DrinkPreferences.balanced.toOptimizationTargets()
         let targets = prefs.toOptimizationTargets()
 
-        #expect(targets.brixRange.lowerBound >= 14.0, "Sweet preference should have higher Brix target")
+        #expect(targets.brixRange.lowerBound >= balanced.brixRange.lowerBound, "Sweet preference should have higher-or-equal Brix target")
+    }
+
+    @Test("Preference Brix stays inside ABV-aware science window")
+    func preferenceBrixClampedToScience() {
+        let calculator = SlushCalculator()
+        let extreme = DrinkPreferences(sweetnessLevel: 1.0, slushThickness: 1.0, alcoholStrength: 1.0)
+        let targets = extreme.toOptimizationTargets()
+        let abvMid = (targets.abvRange.lowerBound + targets.abvRange.upperBound) / 2
+        let science = calculator.optimalBrixRange(forABV: abvMid)
+
+        #expect(targets.brixRange.lowerBound >= science.lowerBound - 0.01)
+        #expect(targets.brixRange.upperBound <= science.upperBound + 0.01)
     }
 
     @Test("Light alcohol preferences produce lower ABV")

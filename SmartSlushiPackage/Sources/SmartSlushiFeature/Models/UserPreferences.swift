@@ -97,21 +97,29 @@ public struct OptimizationTargets: Sendable {
 }
 
 extension DrinkPreferences {
-    /// Convert preferences to optimization targets
+    /// Convert preferences to optimization targets, clamped to physically workable slush ranges.
     public func toOptimizationTargets() -> OptimizationTargets {
-        // Sweetness: 0.0 = tart (Brix 12-13), 1.0 = sweet (Brix 15-16)
-        let brixBase = 12.0 + (sweetnessLevel * 3.0)
-
-        // Thickness: adjusts Brix slightly (+/- 0.5)
-        let thicknessAdjust = (slushThickness - 0.5) * 1.0
-
-        let brixLow = brixBase + thicknessAdjust
-        let brixHigh = brixLow + 1.0
-
         // Alcohol: 0.0 = light (5-6%), 1.0 = strong (9-10%)
         let abvBase = 5.0 + (alcoholStrength * 4.0)
         let abvLow = abvBase
         let abvHigh = abvBase + 1.0
+        let abvMid = (abvLow + abvHigh) / 2.0
+
+        // Science-backed Brix window for the target ABV
+        let scienceBrix = SlushCalculator().optimalBrixRange(forABV: abvMid)
+
+        // Sweetness: 0.0 = tart, 1.0 = sweet — shift within the science window
+        let windowWidth = scienceBrix.upperBound - scienceBrix.lowerBound
+        let sweetnessShift = (sweetnessLevel - 0.5) * windowWidth
+        // Thickness: smaller nudge inside the window
+        let thicknessAdjust = (slushThickness - 0.5) * (windowWidth * 0.5)
+
+        var brixLow = scienceBrix.lowerBound + sweetnessShift + thicknessAdjust
+        var brixHigh = brixLow + max(1.0, windowWidth * 0.5)
+
+        // Clamp preference window to stay inside the science range
+        brixLow = min(max(brixLow, scienceBrix.lowerBound), scienceBrix.upperBound - 0.5)
+        brixHigh = min(max(brixHigh, brixLow + 0.5), scienceBrix.upperBound)
 
         return OptimizationTargets(
             brixRange: brixLow...brixHigh,
