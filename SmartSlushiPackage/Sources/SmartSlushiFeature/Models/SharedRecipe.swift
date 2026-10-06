@@ -175,11 +175,22 @@ public struct SharedRecipe: Identifiable, Sendable {
         ingredientLookup: (UUID) -> Ingredient?,
         stats: RecipeStats
     ) -> SharedRecipe {
-        let exportedIngredients = savedRecipe.ingredients.compactMap { recipeIngredient -> ExportedIngredient? in
-            guard let ingredient = ingredientLookup(recipeIngredient.ingredientId) else {
-                return nil
+        let exportedIngredients = savedRecipe.ingredients.map { recipeIngredient -> ExportedIngredient in
+            if let ingredient = ingredientLookup(recipeIngredient.ingredientId) {
+                return ExportedIngredient(from: recipeIngredient, ingredient: ingredient)
             }
-            return ExportedIngredient(from: recipeIngredient, ingredient: ingredient)
+            // Prefer embedded custom snapshots when the live lookup misses
+            if let custom = savedRecipe.customIngredients.first(where: { $0.id == recipeIngredient.ingredientId }) {
+                return ExportedIngredient(from: recipeIngredient, ingredient: custom)
+            }
+            return ExportedIngredient(
+                name: "Unknown Ingredient",
+                category: IngredientCategory.misc.rawValue,
+                abv: 0,
+                brix: 0,
+                amount: recipeIngredient.amount,
+                unit: recipeIngredient.unit.rawValue
+            )
         }
 
         return SharedRecipe(
@@ -206,11 +217,19 @@ public struct SharedRecipe: Identifiable, Sendable {
         ingredientLookup: (UUID) -> Ingredient?,
         stats: RecipeStats
     ) -> SharedRecipe {
-        let exportedIngredients = recipe.ingredients.compactMap { recipeIngredient -> ExportedIngredient? in
-            guard let ingredient = ingredientLookup(recipeIngredient.ingredientId) else {
-                return nil
+        let exportedIngredients = recipe.ingredients.map { recipeIngredient -> ExportedIngredient in
+            if let ingredient = ingredientLookup(recipeIngredient.ingredientId) {
+                return ExportedIngredient(from: recipeIngredient, ingredient: ingredient)
             }
-            return ExportedIngredient(from: recipeIngredient, ingredient: ingredient)
+            // Preserve amount/unit even when the lookup fails so shared recipes stay complete
+            return ExportedIngredient(
+                name: "Unknown Ingredient",
+                category: IngredientCategory.misc.rawValue,
+                abv: 0,
+                brix: 0,
+                amount: recipeIngredient.amount,
+                unit: recipeIngredient.unit.rawValue
+            )
         }
 
         return SharedRecipe(

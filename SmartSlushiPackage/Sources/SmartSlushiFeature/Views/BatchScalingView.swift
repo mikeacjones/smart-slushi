@@ -128,7 +128,7 @@ struct BatchScalingView: View {
                         applyScaling()
                     }
                     .fontWeight(.semibold)
-                    .disabled(scalingResult == nil || scalingResult?.scaleFactor == 1.0)
+                    .disabled(scalingResult == nil || abs((scalingResult?.scaleFactor ?? 1) - 1.0) < 0.001)
                 }
             }
             .onAppear {
@@ -375,7 +375,20 @@ struct BatchScalingView: View {
             }
         }
 
-        let effectiveFactor = currentTotal > 0 ? targetSizeOz / currentTotal : 1
+        let lockedVolumeOz = recipe.ingredients
+            .filter(\.isLocked)
+            .reduce(0.0) { $0 + $1.volumeInOz }
+        let unlockedVolumeOz = currentTotal - lockedVolumeOz
+
+        // When locks are present, the meaningful factor is how unlocked ingredients scale
+        let effectiveFactor: Double
+        if lockedVolumeOz > 0, unlockedVolumeOz > 0 {
+            effectiveFactor = max(0, targetSizeOz - lockedVolumeOz) / unlockedVolumeOz
+        } else if currentTotal > 0 {
+            effectiveFactor = targetSizeOz / currentTotal
+        } else {
+            effectiveFactor = 1
+        }
 
         scalingResult = ScalingResult(
             originalBatchSize: currentTotal,
@@ -437,7 +450,7 @@ struct BatchScalingView: View {
                 }
             }
 
-            if let result = scalingResult, result.scaleFactor != 1.0 {
+            if let result = scalingResult, abs(result.scaleFactor - 1.0) >= 0.001 {
                 HStack {
                     Image(systemName: result.scaleFactor > 1.0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
                         .foregroundStyle(result.scaleFactor > 1.0 ? .green : .orange)
@@ -613,7 +626,7 @@ struct BatchScalingView: View {
     }
 
     private func applyScaling() {
-        guard let result = scalingResult, result.scaleFactor != 1.0 else { return }
+        guard let result = scalingResult, abs(result.scaleFactor - 1.0) >= 0.001 else { return }
 
         let scaledRecipe = calculator.scaleRecipe(
             recipe,

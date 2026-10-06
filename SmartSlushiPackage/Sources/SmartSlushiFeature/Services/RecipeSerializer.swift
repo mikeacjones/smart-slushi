@@ -263,16 +263,25 @@ public final class RecipeSerializer: Sendable {
         _ recipe: Recipe,
         ingredientLookup: @escaping (UUID) -> Ingredient?
     ) -> ExportableRecipe {
-        let ingredientData = recipe.ingredients.compactMap { recipeIngredient -> ExportableRecipe.IngredientData? in
-            guard let ingredient = ingredientLookup(recipeIngredient.ingredientId) else { return nil }
-
+        let ingredientData = recipe.ingredients.map { recipeIngredient -> ExportableRecipe.IngredientData in
+            if let ingredient = ingredientLookup(recipeIngredient.ingredientId) {
+                return ExportableRecipe.IngredientData(
+                    name: ingredient.name,
+                    amount: recipeIngredient.amount,
+                    unit: recipeIngredient.unit.rawValue,
+                    abv: ingredient.abv,
+                    brix: ingredient.brix,
+                    category: ingredient.category.rawValue,
+                    isLocked: recipeIngredient.isLocked
+                )
+            }
             return ExportableRecipe.IngredientData(
-                name: ingredient.name,
+                name: "Unknown Ingredient",
                 amount: recipeIngredient.amount,
                 unit: recipeIngredient.unit.rawValue,
-                abv: ingredient.abv,
-                brix: ingredient.brix,
-                category: ingredient.category.rawValue,
+                abv: 0,
+                brix: 0,
+                category: IngredientCategory.misc.rawValue,
                 isLocked: recipeIngredient.isLocked
             )
         }
