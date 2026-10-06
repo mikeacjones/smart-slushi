@@ -314,7 +314,7 @@ struct AboutView: View {
                             ScienceRow(
                                 icon: "drop.fill",
                                 title: "Brix",
-                                description: "Sugar content (aim for 13-15)"
+                                description: "Sugar estimate (aim near 13–15, ABV-adjusted)"
                             )
 
                             ScienceRow(
