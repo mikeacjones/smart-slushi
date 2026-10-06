@@ -206,7 +206,15 @@ public final class SlushCalculator: Sendable {
             return unchanged
         }
 
-        let targetUnlockedOz = max(0, targetSize - lockedVolumeOz)
+        // Can't shrink below locked volume without changing locked amounts
+        guard targetSize >= lockedVolumeOz else {
+            var unchanged = recipe
+            unchanged.targetBatchSize = currentTotal
+            unchanged.modifiedAt = Date()
+            return unchanged
+        }
+
+        let targetUnlockedOz = targetSize - lockedVolumeOz
         let scaleFactor = targetUnlockedOz / unlockedVolumeOz
 
         let scaledIngredients = recipe.ingredients.map { ingredient -> RecipeIngredient in

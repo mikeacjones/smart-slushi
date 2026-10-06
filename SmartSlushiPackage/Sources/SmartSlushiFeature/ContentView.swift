@@ -23,8 +23,12 @@ public struct ContentView: View {
                 if let recentIngredientIds = recipeStore.userPreferences?.recentIngredientIds {
                     database.setRecentIngredientIds(recentIngredientIds)
                 }
-                // Hydrate device settings from CloudKit-backed preferences when available
-                if recipeStore.userPreferences != nil {
+                // Hydrate device settings from CloudKit-backed preferences when available.
+                // Fresh factory-default rows must be seeded FROM UserDefaults, not the reverse,
+                // or local settings get wiped on first launch / empty CloudKit.
+                if recipeStore.preferencesWereJustCreated {
+                    recipeStore.syncFromUserSettings(settingsManager.settings)
+                } else if recipeStore.userPreferences != nil {
                     var merged = settingsManager.settings
                     recipeStore.mergeCloudPreferences(into: &merged)
                     settingsManager.replaceSettings(merged)

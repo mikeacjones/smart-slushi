@@ -18,6 +18,10 @@ public final class RecipeStore {
     /// User preferences from persistent storage
     public private(set) var userPreferences: UserPreferencesStore?
 
+    /// True when `userPreferences` was just inserted with factory defaults this session
+    /// (caller should seed from local UserSettings instead of merging CloudKit → device).
+    public private(set) var preferencesWereJustCreated = false
+
     /// Sort order for recipes
     public enum SortOrder: String, CaseIterable, Sendable {
         case dateCreated = "Date Created"
@@ -202,24 +206,22 @@ public final class RecipeStore {
 
         do {
             let results = try context.fetch(descriptor)
+            preferencesWereJustCreated = false
 
             if results.isEmpty {
-                // Create default preferences
+                // Create default preferences — ContentView should seed from UserDefaults
                 let defaults = UserPreferencesStore()
                 context.insert(defaults)
                 try context.save()
                 userPreferences = defaults
+                preferencesWereJustCreated = true
             } else if results.count == 1 {
                 // Normal case - single preferences record
                 userPreferences = results.first
             } else {
                 // CloudKit sync may have created duplicates - merge and keep the most customized one
-                // Keep the one that appears most customized (non-default values)
                 let sorted = results.sorted { prefs1, prefs2 in
-                    // Prioritize preferences with more recent ingredients or non-default settings
-                    let score1 = prefs1.recentIngredientIds.count + (prefs1.machineCapacity != 72 ? 10 : 0)
-                    let score2 = prefs2.recentIngredientIds.count + (prefs2.machineCapacity != 72 ? 10 : 0)
-                    return score1 > score2
+                    Self.customizationScore(prefs1) > Self.customizationScore(prefs2)
                 }
 
                 let preferred = sorted[0]
@@ -234,6 +236,23 @@ public final class RecipeStore {
                     }
                     preferred.recentIngredientIds = Array(mergedRecent.prefix(10))
 
+                    // Prefer non-default drink / batch / serving values from the loser when winner is default
+                    if preferred.defaultBatchSize == 64, duplicate.defaultBatchSize != 64 {
+                        preferred.defaultBatchSize = duplicate.defaultBatchSize
+                    }
+                    if preferred.servingSizeOz == 8, duplicate.servingSizeOz != 8 {
+                        preferred.servingSizeOz = duplicate.servingSizeOz
+                    }
+                    if preferred.sweetnessLevel == 0.5, duplicate.sweetnessLevel != 0.5 {
+                        preferred.sweetnessLevel = duplicate.sweetnessLevel
+                    }
+                    if preferred.slushThickness == 0.5, duplicate.slushThickness != 0.5 {
+                        preferred.slushThickness = duplicate.slushThickness
+                    }
+                    if preferred.alcoholStrength == 0.5, duplicate.alcoholStrength != 0.5 {
+                        preferred.alcoholStrength = duplicate.alcoholStrength
+                    }
+
                     context.delete(duplicate)
                 }
 
@@ -242,6 +261,19 @@ public final class RecipeStore {
         } catch {
             print("Error loading user preferences: \(error)")
         }
+    }
+
+    /// Higher score = more customized / less likely to be a factory default
+    private static func customizationScore(_ prefs: UserPreferencesStore) -> Int {
+        var score = prefs.recentIngredientIds.count
+        if prefs.machineCapacity != 72 { score += 10 }
+        if prefs.defaultBatchSize != 64 { score += 5 }
+        if prefs.servingSizeOz != 8 { score += 5 }
+        if prefs.defaultUnitRaw != "oz" { score += 3 }
+        if prefs.sweetnessLevel != 0.5 { score += 3 }
+        if prefs.slushThickness != 0.5 { score += 3 }
+        if prefs.alcoholStrength != 0.5 { score += 3 }
+        return score
     }
 
     /// Save user preferences

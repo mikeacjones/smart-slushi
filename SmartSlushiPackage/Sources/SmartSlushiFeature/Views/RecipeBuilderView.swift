@@ -62,6 +62,7 @@ public struct RecipeBuilderView: View {
     @State private var optimizationResult: OptimizationResult?
     @State private var showingOptimizationResult = false
     @State private var showingSaveConfirmation = false
+    @State private var showingClearConfirmation = false
     @State private var showingRecipeOutput = false
     @State private var showingBatchScaling = false
     @State private var showingCommunityRecipes = false
@@ -185,6 +186,14 @@ public struct RecipeBuilderView: View {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text("Your recipe has been saved successfully.")
+            }
+            .alert("Clear Recipe?", isPresented: $showingClearConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Clear", role: .destructive) {
+                    clearRecipe()
+                }
+            } message: {
+                Text("This starts a new blank recipe. Your saved recipes are not deleted.")
             }
             .sheet(isPresented: $showingRecipeOutput) {
                 RecipeOutputView(recipe: recipe) { importedRecipe in
@@ -508,7 +517,7 @@ public struct RecipeBuilderView: View {
                 .disabled(recipe.ingredients.isEmpty)
 
                 Button {
-                    clearRecipe()
+                    showingClearConfirmation = true
                 } label: {
                     Label("Clear", systemImage: "trash")
                         .frame(maxWidth: .infinity)
@@ -516,7 +525,8 @@ public struct RecipeBuilderView: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(.red)
-                .disabled(recipe.ingredients.isEmpty)
+                .disabled(recipe.ingredients.isEmpty && recipe.name == "New Recipe")
+                .accessibilityLabel("Clear recipe")
             }
         }
     }
@@ -720,11 +730,14 @@ public struct RecipeBuilderView: View {
 
     private func clearRecipe() {
         withAnimation {
-            recipe.ingredients.removeAll()
-            recipe.targetBatchSize = settingsManager.settings.defaultBatchSize
-            recipe.targetUnit = displayUnit
-            recipe.modifiedAt = Date()
-            batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
+            // New identity so Save creates a new record instead of overwriting a loaded recipe
+            var blank = Recipe(name: "New Recipe")
+            blank.targetBatchSize = settingsManager.settings.defaultBatchSize
+            blank.targetUnit = settingsManager.settings.preferredUnit
+            recipe = blank
+            displayUnit = blank.targetUnit
+            batchSizeInput = formatBatchSize(blank.targetBatchSize, for: displayUnit)
+            preferences = settingsManager.settings.drinkPreferences
         }
     }
 }
@@ -1094,8 +1107,8 @@ struct PreferenceSlider: View {
     // Track if we've hit the optimal range to provide haptic feedback
     @State private var wasInOptimalRange = false
 
-    /// Optimal range is around the middle (0.4-0.6) for balanced drinks
-    private var isInOptimalRange: Bool {
+    /// Mid-slider range for the default taste preference (not freeze-optimal science)
+    private var isNearDefault: Bool {
         value >= 0.4 && value <= 0.6
     }
 
@@ -1106,14 +1119,14 @@ struct PreferenceSlider: View {
                     .font(.subheadline.weight(.medium))
                 Spacer()
 
-                // Show "Balanced" indicator when in optimal range
-                if isInOptimalRange {
-                    Text("Balanced")
+                // Show "Default" when near the middle of the taste slider
+                if isNearDefault {
+                    Text("Default")
                         .font(.caption2)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.green.opacity(0.15))
+                        .background(Color.secondary.opacity(0.12))
                         .clipShape(Capsule())
                 }
             }
