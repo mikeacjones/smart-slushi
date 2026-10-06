@@ -691,7 +691,7 @@ public struct RecipeBuilderView: View {
 
         withAnimation {
             recipe = balanced
-            batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
+            writeBatchSizeInput(formatBatchSize(recipe.targetBatchSize, for: displayUnit))
             isAutoBalancing = false
             optimizationResult = result
 
@@ -719,7 +719,7 @@ public struct RecipeBuilderView: View {
         withAnimation {
             recipe = template.createRecipe(targetBatchSize: recipe.targetBatchSize)
             recipe.targetUnit = displayUnit
-            batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
+            writeBatchSizeInput(formatBatchSize(recipe.targetBatchSize, for: displayUnit))
         }
     }
 
@@ -733,7 +733,7 @@ public struct RecipeBuilderView: View {
         withAnimation {
             recipe = loadedRecipe
             displayUnit = recipe.targetUnit
-            batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
+            writeBatchSizeInput(formatBatchSize(recipe.targetBatchSize, for: displayUnit))
         }
     }
 
@@ -756,7 +756,7 @@ public struct RecipeBuilderView: View {
             blank.targetUnit = settingsManager.settings.preferredUnit
             recipe = blank
             displayUnit = blank.targetUnit
-            batchSizeInput = formatBatchSize(blank.targetBatchSize, for: displayUnit)
+            writeBatchSizeInput(formatBatchSize(blank.targetBatchSize, for: displayUnit))
             preferences = settingsManager.settings.drinkPreferences
         }
     }
