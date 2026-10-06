@@ -195,6 +195,8 @@ struct TooltipButton: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("About \(content.title)")
+            .accessibilityHint("Shows an explanation of \(content.title)")
             .sheet(isPresented: $showingTooltip) {
                 TooltipView(content: content)
             }

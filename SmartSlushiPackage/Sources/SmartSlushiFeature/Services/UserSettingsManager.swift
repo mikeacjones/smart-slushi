@@ -21,6 +21,11 @@ public final class UserSettingsManager: Sendable {
 
     // MARK: - Public Methods
 
+    /// Replace all settings (used when hydrating from CloudKit-backed store)
+    public func replaceSettings(_ newSettings: UserSettings) {
+        settings = newSettings
+    }
+
     /// Update the default batch size
     public func setDefaultBatchSize(_ size: Double) {
         settings.defaultBatchSize = max(1, size)

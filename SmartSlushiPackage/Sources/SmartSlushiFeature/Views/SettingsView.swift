@@ -52,6 +52,9 @@ public struct SettingsView: View {
             .sheet(isPresented: $showingAbout) {
                 AboutView()
             }
+            .onDisappear {
+                recipeStore.syncFromUserSettings(settingsManager.settings)
+            }
         }
     }
 

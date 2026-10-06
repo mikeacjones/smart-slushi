@@ -23,6 +23,14 @@ public struct ContentView: View {
                 if let recentIngredientIds = recipeStore.userPreferences?.recentIngredientIds {
                     database.setRecentIngredientIds(recentIngredientIds)
                 }
+                // Hydrate device settings from CloudKit-backed preferences when available
+                if recipeStore.userPreferences != nil {
+                    var merged = settingsManager.settings
+                    recipeStore.mergeCloudPreferences(into: &merged)
+                    settingsManager.replaceSettings(merged)
+                } else {
+                    recipeStore.syncFromUserSettings(settingsManager.settings)
+                }
                 // Show onboarding if not completed
                 if !settingsManager.settings.hasCompletedOnboarding {
                     showingOnboarding = true

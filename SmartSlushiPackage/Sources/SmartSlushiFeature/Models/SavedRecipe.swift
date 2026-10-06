@@ -182,7 +182,7 @@ public final class UserPreferencesStore {
 
     public init(
         identifier: String = "default",
-        defaultBatchSize: Double = 72,
+        defaultBatchSize: Double = 64,
         defaultUnitRaw: String = "oz",
         machineCapacity: Double = 72,
         sweetnessLevel: Double = 0.5,

@@ -234,6 +234,25 @@ public final class RecipeStore {
         savePreferences()
     }
 
+    /// Sync app settings into the CloudKit-backed preferences store
+    public func syncFromUserSettings(_ settings: UserSettings) {
+        guard let prefs = userPreferences else { return }
+        prefs.defaultBatchSize = settings.defaultBatchSize
+        prefs.defaultUnit = settings.preferredUnit
+        prefs.machineCapacity = settings.machineModel.totalCapacity
+        prefs.update(from: settings.drinkPreferences)
+        savePreferences()
+    }
+
+    /// Apply CloudKit-synced preference fields onto local UserSettings (device-local fields preserved)
+    public func mergeCloudPreferences(into settings: inout UserSettings) {
+        guard let prefs = userPreferences else { return }
+        settings.defaultBatchSize = prefs.defaultBatchSize
+        settings.preferredUnit = prefs.defaultUnit
+        settings.machineModel = prefs.machineCapacity >= 88 ? .large88oz : .standard72oz
+        settings.drinkPreferences = prefs.toDrinkPreferences()
+    }
+
     /// Add ingredient to recent list
     public func markIngredientAsRecentlyUsed(_ id: UUID) {
         guard let prefs = userPreferences else { return }

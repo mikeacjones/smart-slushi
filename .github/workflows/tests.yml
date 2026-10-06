@@ -1,0 +1,50 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  package-tests:
+    name: SmartSlushiFeature Package Tests
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          xcrun simctl list devices available | head -40
+
+      - name: Resolve package
+        working-directory: SmartSlushiPackage
+        run: xcodebuild -resolvePackageDependencies -scheme SmartSlushiFeature || true
+
+      - name: Run package tests on iOS Simulator
+        working-directory: SmartSlushiPackage
+        run: |
+          set -euo pipefail
+          # Prefer a concrete iPhone simulator; fall back to any available iPhone
+          DEST=""
+          for name in "iPhone 16" "iPhone 16 Pro" "iPhone 15" "iPhone 15 Pro"; do
+            if xcrun simctl list devices available | grep -q "$name"; then
+              DEST="platform=iOS Simulator,name=$name"
+              break
+            fi
+          done
+          if [ -z "$DEST" ]; then
+            DEST="generic/platform=iOS Simulator"
+          fi
+          echo "Using destination: $DEST"
+          xcodebuild test \
+            -scheme SmartSlushiFeature \
+            -destination "$DEST" \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO

@@ -243,6 +243,7 @@ public struct RecipeBuilderView: View {
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
                 .textFieldStyle(.plain)
+                .accessibilityLabel("Recipe name")
 
             HStack(spacing: 8) {
                 Text("Batch Size:")
@@ -253,6 +254,8 @@ public struct RecipeBuilderView: View {
                     .multilineTextAlignment(.trailing)
                     .frame(width: 70)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Batch size")
+                    .accessibilityValue("\(batchSizeInput) \(displayUnit.abbreviation)")
                     .onChange(of: batchSizeInput) { _, newValue in
                         updateBatchSize(from: newValue)
                     }
@@ -264,6 +267,7 @@ public struct RecipeBuilderView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 140)
+                .accessibilityLabel("Batch size unit")
                 .onChange(of: displayUnit) { oldUnit, newUnit in
                     convertBatchSize(from: oldUnit, to: newUnit)
                 }
@@ -421,6 +425,7 @@ public struct RecipeBuilderView: View {
                             set: { newValue in
                                 preferences.sweetnessLevel = newValue
                                 settingsManager.setDrinkPreferences(preferences)
+                                recipeStore.updateDrinkPreferences(preferences)
                             }
                         ),
                         leftLabel: "Tart",
@@ -434,6 +439,7 @@ public struct RecipeBuilderView: View {
                             set: { newValue in
                                 preferences.slushThickness = newValue
                                 settingsManager.setDrinkPreferences(preferences)
+                                recipeStore.updateDrinkPreferences(preferences)
                             }
                         ),
                         leftLabel: "Sippable",
@@ -447,6 +453,7 @@ public struct RecipeBuilderView: View {
                             set: { newValue in
                                 preferences.alcoholStrength = newValue
                                 settingsManager.setDrinkPreferences(preferences)
+                                recipeStore.updateDrinkPreferences(preferences)
                             }
                         ),
                         leftLabel: "Light",
@@ -996,6 +1003,8 @@ struct IngredientRow: View {
                     .frame(width: 60)
                     .textFieldStyle(.roundedBorder)
                     .disabled(recipeIngredient.isLocked)
+                    .accessibilityLabel("Amount")
+                    .accessibilityValue("\(recipeIngredient.amount) \(recipeIngredient.unit.abbreviation)")
 
                 Picker("Unit", selection: $recipeIngredient.unit) {
                     ForEach(MeasurementUnit.allCases, id: \.self) { unit in
@@ -1006,6 +1015,7 @@ struct IngredientRow: View {
                 .labelsHidden()
                 .frame(width: 60)
                 .disabled(recipeIngredient.isLocked)
+                .accessibilityLabel("Unit")
             }
 
             Button(role: .destructive) {
@@ -1015,6 +1025,7 @@ struct IngredientRow: View {
                     .foregroundStyle(.red)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Remove \(ingredient?.name ?? "ingredient")")
         }
         .padding(.vertical, 8)
         .opacity(recipeIngredient.isLocked ? 0.85 : 1)
@@ -1063,6 +1074,8 @@ struct PreferenceSlider: View {
                     .frame(width: 60, alignment: .leading)
 
                 Slider(value: $value, in: 0...1)
+                    .accessibilityLabel(title)
+                    .accessibilityValue(String(format: "%.0f percent", value * 100))
                     .onChange(of: value) { _, newValue in
                         let nowInRange = newValue >= 0.4 && newValue <= 0.6
                         if nowInRange && !wasInOptimalRange {
