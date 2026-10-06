@@ -247,6 +247,10 @@ public struct RecipeBuilderView: View {
                     preferences = settingsManager.settings.drinkPreferences
                 }
             }
+            .onChange(of: recipe.ingredients) { _, _ in
+                // Keep batch metadata aligned when amounts/units change (not only add/remove)
+                syncTargetBatchSizeFromIngredients()
+            }
         }
     }
 
