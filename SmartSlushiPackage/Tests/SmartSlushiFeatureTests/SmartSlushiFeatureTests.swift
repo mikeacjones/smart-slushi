@@ -1033,3 +1033,31 @@ struct TemplateScienceAccuracyTests {
     }
 }
 
+// MARK: - Custom Ingredient Snapshot Tests
+
+@Suite("Custom Ingredient Snapshot Tests")
+struct CustomIngredientSnapshotTests {
+    @Test("Custom ingredient encodes and decodes for recipe snapshots")
+    func customIngredientCodableRoundTrip() throws {
+        let original = Ingredient(
+            name: "Homemade Cordial",
+            category: .liqueur,
+            abv: 18,
+            brix: 35,
+            isCustom: true,
+            notes: "batch #4"
+        )
+
+        let data = try JSONEncoder().encode([original])
+        let decoded = try JSONDecoder().decode([Ingredient].self, from: data)
+
+        #expect(decoded.count == 1)
+        #expect(decoded[0].id == original.id)
+        #expect(decoded[0].name == "Homemade Cordial")
+        #expect(decoded[0].abv == 18)
+        #expect(decoded[0].brix == 35)
+        #expect(decoded[0].isCustom == true)
+        #expect(decoded[0].notes == "batch #4")
+    }
+}
+
