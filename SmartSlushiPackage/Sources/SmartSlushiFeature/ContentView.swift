@@ -28,6 +28,12 @@ public struct ContentView: View {
                     showingOnboarding = true
                 }
             }
+            .onChange(of: settingsManager.settings.hasCompletedOnboarding) { _, hasCompleted in
+                // Re-show onboarding immediately when reset from Settings
+                if !hasCompleted {
+                    showingOnboarding = true
+                }
+            }
             .fullScreenCover(isPresented: $showingOnboarding) {
                 OnboardingView {
                     showingOnboarding = false

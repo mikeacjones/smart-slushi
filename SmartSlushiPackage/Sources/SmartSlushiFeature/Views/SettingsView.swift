@@ -59,7 +59,7 @@ public struct SettingsView: View {
 
     private var defaultsSection: some View {
         Section {
-            // Default Batch Size
+            // Default Batch Size — stored in ounces, edited in preferred unit
             HStack {
                 Text("Default Batch Size")
 
@@ -68,14 +68,22 @@ public struct SettingsView: View {
                 TextField(
                     "Size",
                     value: Binding(
-                        get: { settingsManager.settings.defaultBatchSize },
-                        set: { settingsManager.setDefaultBatchSize($0) }
+                        get: {
+                            MeasurementUnit.oz.convert(
+                                settingsManager.settings.defaultBatchSize,
+                                to: settingsManager.settings.preferredUnit
+                            )
+                        },
+                        set: { displayValue in
+                            let oz = settingsManager.settings.preferredUnit.convert(displayValue, to: .oz)
+                            settingsManager.setDefaultBatchSize(oz)
+                        }
                     ),
-                    format: .number.precision(.fractionLength(0))
+                    format: .number.precision(.fractionLength(0...1))
                 )
-                .keyboardType(.numberPad)
+                .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
-                .frame(width: 60)
+                .frame(width: 70)
 
                 Text(settingsManager.settings.preferredUnit.abbreviation)
                     .foregroundStyle(.secondary)
@@ -93,7 +101,7 @@ public struct SettingsView: View {
         } header: {
             Text("Recipe Defaults")
         } footer: {
-            Text("These settings will be used for new recipes.")
+            Text("These settings will be used for new recipes. Batch size is stored in ounces and shown in your preferred unit.")
         }
     }
 

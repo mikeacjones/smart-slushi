@@ -227,6 +227,10 @@ public struct RecipeBuilderView: View {
             }
             .onAppear {
                 applyUserDefaultsIfNeeded()
+                // Always sync taste preferences from settings (including when editing a saved recipe)
+                if !shouldApplySettingsDefaults || hasAppliedInitialDefaults {
+                    preferences = settingsManager.settings.drinkPreferences
+                }
             }
         }
     }
@@ -284,8 +288,20 @@ public struct RecipeBuilderView: View {
         guard let value = Double(input), value > 0 else { return }
         // Store internally always in oz
         let valueInOz = displayUnit.convert(value, to: .oz)
+        let previousSize = recipe.targetBatchSize
+
         recipe.targetBatchSize = valueInOz
         recipe.targetUnit = displayUnit
+
+        // Scale existing ingredients so the batch-size field drives the recipe
+        guard !recipe.ingredients.isEmpty, previousSize > 0, abs(valueInOz - previousSize) > 0.01 else {
+            return
+        }
+        recipe = calculator.scaleRecipe(
+            recipe,
+            toBatchSize: valueInOz,
+            ingredientLookup: database.lookupFunction()
+        )
     }
 
     private func convertBatchSize(from oldUnit: MeasurementUnit, to newUnit: MeasurementUnit) {
@@ -400,21 +416,39 @@ public struct RecipeBuilderView: View {
                 VStack(spacing: 16) {
                     PreferenceSlider(
                         title: "Sweetness",
-                        value: $preferences.sweetnessLevel,
+                        value: Binding(
+                            get: { preferences.sweetnessLevel },
+                            set: { newValue in
+                                preferences.sweetnessLevel = newValue
+                                settingsManager.setDrinkPreferences(preferences)
+                            }
+                        ),
                         leftLabel: "Tart",
                         rightLabel: "Sweet"
                     )
 
                     PreferenceSlider(
                         title: "Thickness",
-                        value: $preferences.slushThickness,
+                        value: Binding(
+                            get: { preferences.slushThickness },
+                            set: { newValue in
+                                preferences.slushThickness = newValue
+                                settingsManager.setDrinkPreferences(preferences)
+                            }
+                        ),
                         leftLabel: "Sippable",
                         rightLabel: "Thick"
                     )
 
                     PreferenceSlider(
                         title: "Strength",
-                        value: $preferences.alcoholStrength,
+                        value: Binding(
+                            get: { preferences.alcoholStrength },
+                            set: { newValue in
+                                preferences.alcoholStrength = newValue
+                                settingsManager.setDrinkPreferences(preferences)
+                            }
+                        ),
                         leftLabel: "Light",
                         rightLabel: "Strong"
                     )
@@ -484,12 +518,13 @@ public struct RecipeBuilderView: View {
         preferences = settingsManager.settings.drinkPreferences
 
         let preferredUnit = settingsManager.settings.preferredUnit
-        let defaultBatchSize = max(1, settingsManager.settings.defaultBatchSize)
+        // defaultBatchSize is always stored in ounces
+        let defaultBatchSizeOz = max(1, settingsManager.settings.defaultBatchSize)
 
-        recipe.targetBatchSize = preferredUnit.convert(defaultBatchSize, to: .oz)
+        recipe.targetBatchSize = defaultBatchSizeOz
         recipe.targetUnit = preferredUnit
         displayUnit = preferredUnit
-        batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: preferredUnit)
+        batchSizeInput = formatBatchSize(defaultBatchSizeOz, for: preferredUnit)
     }
 
     private func calculateCurrentStats() -> RecipeStats {
@@ -921,6 +956,17 @@ struct IngredientRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            Button {
+                recipeIngredient.isLocked.toggle()
+            } label: {
+                Image(systemName: recipeIngredient.isLocked ? "lock.fill" : "lock.open")
+                    .foregroundStyle(recipeIngredient.isLocked ? .orange : .secondary)
+                    .frame(width: 24)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(recipeIngredient.isLocked ? "Unlock ingredient" : "Lock ingredient")
+            .accessibilityHint("Locked ingredients are not changed by auto-balance")
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(ingredient?.name ?? "Unknown")
                     .font(.body)
@@ -949,6 +995,7 @@ struct IngredientRow: View {
                     .multilineTextAlignment(.trailing)
                     .frame(width: 60)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(recipeIngredient.isLocked)
 
                 Picker("Unit", selection: $recipeIngredient.unit) {
                     ForEach(MeasurementUnit.allCases, id: \.self) { unit in
@@ -958,6 +1005,7 @@ struct IngredientRow: View {
                 .pickerStyle(.menu)
                 .labelsHidden()
                 .frame(width: 60)
+                .disabled(recipeIngredient.isLocked)
             }
 
             Button(role: .destructive) {
@@ -969,6 +1017,7 @@ struct IngredientRow: View {
             .buttonStyle(.plain)
         }
         .padding(.vertical, 8)
+        .opacity(recipeIngredient.isLocked ? 0.85 : 1)
     }
 }
 

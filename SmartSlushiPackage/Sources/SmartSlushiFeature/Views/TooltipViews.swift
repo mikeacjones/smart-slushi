@@ -88,8 +88,8 @@ enum TooltipContent: String, CaseIterable, Identifiable {
 
         case .freezingPoint:
             return [
-                "Formula: -0.4°C × ABV%",
-                "10% ABV = -4°C freezing point",
+                "Formula: -0.4°C × ABV% (≈ 32 − 0.72×ABV °F)",
+                "10% ABV = -4°C / 24.8°F freezing point",
                 "Lower = harder to freeze"
             ]
         }

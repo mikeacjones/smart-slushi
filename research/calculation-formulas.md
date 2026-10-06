@@ -87,17 +87,16 @@ func calculateFinalBrix(ingredients: [(volume: Double, brix: Double)]) -> Double
 
 ### Freezing Point Calculation
 
-Simple linear approximation (accurate for 0-25% ABV):
+Simple linear approximation (accurate for 0-25% ABV), kept consistent across °C and °F:
 
 ```
 Freezing Point (°C) = -0.4 × ABV%
 Freezing Point (°F) = 32 - (0.72 × ABV%)
+                    = (°C × 9/5) + 32
 ```
 
-More accurate polynomial (0-25% ABV):
-```
-Freezing Point (°F) = (0.0075275 × ABV + 0.054922) × ABV + 31.947
-```
+> Do not use the obsolete polynomial `(0.0075275 × ABV + 0.054922) × ABV + 31.947` —
+> it increases freezing point with ABV and contradicts measured ethanol-water data.
 
 #### Swift Implementation
 ```swift
@@ -106,13 +105,8 @@ func calculateFreezingPointCelsius(abv: Double) -> Double {
 }
 
 func calculateFreezingPointFahrenheit(abv: Double) -> Double {
-    // More accurate polynomial
-    return (0.0075275 * abv + 0.054922) * abv + 31.947
-}
-
-// Alternative simple formula
-func calculateFreezingPointFahrenheitSimple(abv: Double) -> Double {
-    return 32.0 - (0.72 * abv)
+    let celsius = calculateFreezingPointCelsius(abv: abv)
+    return celsius * 9.0 / 5.0 + 32.0
 }
 ```
 
@@ -350,45 +344,33 @@ func mapPreferencesToTargets(_ prefs: DrinkPreferences) -> (brixRange: ClosedRan
 ```swift
 enum SlushabilityStatus {
     case optimal
+    case tooSweet
+    case notSweetEnough
+    case tooAlcoholic
+    case willNotFreeze
     case warning(String)
-    case willNotFreeze(String)
 
-    static func evaluate(abv: Double, brix: Double) -> SlushabilityStatus {
-        // Check ABV first
+    static func evaluate(
+        abv: Double,
+        brix: Double,
+        optimalBrixRange: ClosedRange<Double> = 13...15
+    ) -> Self {
         if abv > 12 {
-            return .willNotFreeze("ABV too high (\(String(format: "%.1f", abv))%). Maximum is ~10-12% for home machines.")
+            return .willNotFreeze
         }
 
         if abv > 10 {
-            let msg = "ABV is \(String(format: "%.1f", abv))% - at the upper limit. May be slushy but could be soft."
-            // Continue to check Brix
-            if brix < 12 {
-                return .warning("\(msg) Also, Brix is low (\(String(format: "%.1f", brix))) - may over-freeze in spots.")
-            }
-            if brix > 16 {
-                return .warning("\(msg) Also, Brix is high (\(String(format: "%.1f", brix))) - may be too runny.")
-            }
-            return .warning(msg)
+            return .tooAlcoholic
         }
 
-        // ABV is good, check Brix
-        if brix < 11 {
-            return .willNotFreeze("Brix too low (\(String(format: "%.1f", brix))). Will freeze into ice block. Add sweetener.")
-        }
+        let hardLow = max(11.0, optimalBrixRange.lowerBound - 2.0)
+        let hardHigh = min(18.0, optimalBrixRange.upperBound + 2.0)
 
-        if brix < 13 {
-            return .warning("Brix is \(String(format: "%.1f", brix)) - slightly low. May be icier than ideal.")
-        }
+        if brix < hardLow { return .willNotFreeze }
+        if brix < optimalBrixRange.lowerBound { return .notSweetEnough }
+        if brix > hardHigh { return .willNotFreeze }
+        if brix > optimalBrixRange.upperBound { return .tooSweet }
 
-        if brix > 17 {
-            return .willNotFreeze("Brix too high (\(String(format: "%.1f", brix))). Will stay runny. Add water.")
-        }
-
-        if brix > 15 {
-            return .warning("Brix is \(String(format: "%.1f", brix)) - slightly high. May be softer than ideal.")
-        }
-
-        // Both in range
         return .optimal
     }
 }

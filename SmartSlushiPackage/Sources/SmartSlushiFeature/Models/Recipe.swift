@@ -34,37 +34,41 @@ public enum SlushabilityStatus: Equatable, Sendable {
     }
 
     /// Evaluate slushability based on ABV and Brix values
-    public static func evaluate(abv: Double, brix: Double) -> SlushabilityStatus {
+    /// - Parameters:
+    ///   - abv: Final alcohol by volume percentage
+    ///   - brix: Final sugar content
+    ///   - optimalBrixRange: ABV-adjusted optimal Brix window (defaults to 13–15)
+    public static func evaluate(
+        abv: Double,
+        brix: Double,
+        optimalBrixRange: ClosedRange<Double> = 13...15
+    ) -> SlushabilityStatus {
         // Check ABV first - too high prevents freezing entirely
         if abv > 12 {
             return .willNotFreeze
         }
 
         if abv > 10 {
-            // At upper limit, give a warning but check Brix too
-            if brix < 12 {
-                return .warning("ABV at \(String(format: "%.1f", abv))% is high, and Brix at \(String(format: "%.1f", brix)) is low - may be icy.")
-            }
-            if brix > 16 {
-                return .warning("ABV at \(String(format: "%.1f", abv))% is high, and Brix at \(String(format: "%.1f", brix)) is high - may be soft.")
-            }
-            return .warning("ABV at \(String(format: "%.1f", abv))% is at the upper limit - may be softer than ideal.")
+            return .tooAlcoholic
         }
 
-        // ABV is acceptable, now check Brix
-        if brix < 11 {
+        // Hard failure bands outside the workable Brix window
+        let hardLow = max(11.0, optimalBrixRange.lowerBound - 2.0)
+        let hardHigh = min(18.0, optimalBrixRange.upperBound + 2.0)
+
+        if brix < hardLow {
             return .willNotFreeze
         }
 
-        if brix < 13 {
+        if brix < optimalBrixRange.lowerBound {
             return .notSweetEnough
         }
 
-        if brix > 17 {
+        if brix > hardHigh {
             return .willNotFreeze
         }
 
-        if brix > 15 {
+        if brix > optimalBrixRange.upperBound {
             return .tooSweet
         }
 

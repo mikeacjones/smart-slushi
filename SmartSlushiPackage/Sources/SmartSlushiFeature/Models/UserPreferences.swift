@@ -124,7 +124,7 @@ extension DrinkPreferences {
 
 /// Global app preferences stored in UserDefaults
 public struct UserSettings: Codable, Sendable {
-    /// Default batch size for new recipes
+    /// Default batch size for new recipes, always stored in ounces
     public var defaultBatchSize: Double
 
     /// Preferred measurement unit

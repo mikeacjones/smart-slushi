@@ -166,23 +166,26 @@ struct BatchScalingView: View {
 
     private var servingsInputSection: some View {
         VStack(spacing: 16) {
-            // Serving size info
+            // Serving size picker (inline — no need to leave for Settings)
             HStack {
                 Image(systemName: "cup.and.saucer.fill")
                     .foregroundStyle(.blue)
 
-                Text("Serving Size: \(Int(settingsManager.settings.servingSizeOz)) oz")
+                Text("Serving Size")
                     .font(.subheadline)
 
                 Spacer()
 
-                Button {
-                    // This would navigate to settings, but for now just show info
-                } label: {
-                    Text("Change in Settings")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                Picker("Serving Size", selection: Binding(
+                    get: { settingsManager.settings.servingSizeOz },
+                    set: { settingsManager.setServingSize($0) }
+                )) {
+                    ForEach(UserSettings.servingSizePresets, id: \.sizeOz) { preset in
+                        Text(preset.label).tag(preset.sizeOz)
+                    }
                 }
+                .labelsHidden()
+                .pickerStyle(.menu)
             }
             .padding()
             .background(Color(.systemGray6))

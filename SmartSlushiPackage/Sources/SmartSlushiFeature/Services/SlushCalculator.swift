@@ -67,18 +67,22 @@ public final class SlushCalculator: Sendable {
     }
 
     /// Calculate freezing point in Celsius based on ABV
+    /// Linear approximation matching ethanol-water data for 0–25% ABV:
+    /// Freezing Point (°C) ≈ -0.4 × ABV%
     /// - Parameter abv: Alcohol by volume percentage
     /// - Returns: Freezing point in Celsius
     public func calculateFreezingPointCelsius(abv: Double) -> Double {
         return -0.4 * abv
     }
 
-    /// Calculate freezing point in Fahrenheit using polynomial approximation
-    /// More accurate than simple linear conversion for 0-25% ABV range
+    /// Calculate freezing point in Fahrenheit based on ABV
+    /// Derived from the Celsius approximation so °C and °F stay consistent:
+    /// Freezing Point (°F) ≈ 32 - (0.72 × ABV%)
     /// - Parameter abv: Alcohol by volume percentage
     /// - Returns: Freezing point in Fahrenheit
     public func calculateFreezingPointFahrenheit(abv: Double) -> Double {
-        return (0.0075275 * abv + 0.054922) * abv + 31.947
+        let celsius = calculateFreezingPointCelsius(abv: abv)
+        return celsius * 9.0 / 5.0 + 32.0
     }
 
     /// Calculate optimal Brix range based on ABV
@@ -130,20 +134,25 @@ public final class SlushCalculator: Sendable {
         let freezingPointC = calculateFreezingPointCelsius(abv: finalABV)
         let freezingPointF = calculateFreezingPointFahrenheit(abv: finalABV)
 
-        // Determine slushability
-        let slushabilityStatus = SlushabilityStatus.evaluate(abv: finalABV, brix: finalBrix)
+        // Determine slushability using ABV-aware optimal Brix ranges
+        let optimalBrix = optimalBrixRange(forABV: finalABV)
+        let slushabilityStatus = SlushabilityStatus.evaluate(
+            abv: finalABV,
+            brix: finalBrix,
+            optimalBrixRange: optimalBrix
+        )
 
         // Add warnings based on values
         if finalABV > 10 {
             warnings.append("High ABV (\(String(format: "%.1f", finalABV))%) - may not freeze properly")
         }
 
-        if finalBrix < 12 {
-            warnings.append("Low sugar (\(String(format: "%.1f", finalBrix)) Brix) - may freeze too hard")
+        if finalBrix < optimalBrix.lowerBound {
+            warnings.append("Low sugar (\(String(format: "%.1f", finalBrix)) Brix) - may freeze too hard (target \(String(format: "%.1f", optimalBrix.lowerBound))–\(String(format: "%.1f", optimalBrix.upperBound)))")
         }
 
-        if finalBrix > 16 {
-            warnings.append("High sugar (\(String(format: "%.1f", finalBrix)) Brix) - may stay runny")
+        if finalBrix > optimalBrix.upperBound {
+            warnings.append("High sugar (\(String(format: "%.1f", finalBrix)) Brix) - may stay runny (target \(String(format: "%.1f", optimalBrix.lowerBound))–\(String(format: "%.1f", optimalBrix.upperBound)))")
         }
 
         // Calculate volume in oz
@@ -391,8 +400,9 @@ public final class RecipeOptimizer: Sendable {
         var foundSweetenerId: UUID?
         var foundSweetenerBrix: Double?
 
-        // Look through existing ingredients for water and sweeteners
+        // Look through existing ingredients for water and sweeteners (skip locked)
         for recipeIngredient in recipe.ingredients {
+            guard !recipeIngredient.isLocked else { continue }
             guard let ingredient = ingredientLookup(recipeIngredient.ingredientId) else { continue }
 
             // Look for water (0 ABV, 0 Brix, typically in mixer category)
@@ -457,11 +467,16 @@ public final class RecipeOptimizer: Sendable {
     ) -> Recipe {
         var updatedRecipe = recipe
 
-        // Check if ingredient already exists in recipe
+        // Amount is always computed in ounces — convert when topping up an existing row
         if let index = updatedRecipe.ingredients.firstIndex(where: { $0.ingredientId == ingredientId }) {
-            updatedRecipe.ingredients[index].amount += amount
+            let existing = updatedRecipe.ingredients[index]
+            // Never adjust locked ingredients
+            guard !existing.isLocked else { return updatedRecipe }
+
+            let amountInExistingUnit = MeasurementUnit.oz.convert(amount, to: existing.unit)
+            updatedRecipe.ingredients[index].amount += amountInExistingUnit
         } else {
-            // Add new ingredient
+            // Add new ingredient in ounces (matching calculation units)
             let newIngredient = RecipeIngredient(
                 ingredientId: ingredientId,
                 amount: amount,

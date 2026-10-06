@@ -32,6 +32,7 @@ struct ShoppingItem: Identifiable {
 @available(iOS 17.0, *)
 public struct RecipeOutputView: View {
     @Environment(IngredientDatabase.self) private var database
+    @Environment(UserSettingsManager.self) private var settingsManager
     @Environment(\.dismiss) private var dismiss
 
     let recipe: Recipe
@@ -296,11 +297,18 @@ public struct RecipeOutputView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Pour the mixture into your Ninja Slushi barrel.")
 
-                        if stats.totalVolumeOz > 72 {
+                        if stats.totalVolumeOz > settingsManager.settings.machineModel.totalCapacity {
                             HStack {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .foregroundStyle(.orange)
-                                Text("This batch exceeds 72oz. You may need to make in batches.")
+                                Text("This batch exceeds \(Int(settingsManager.settings.machineModel.totalCapacity))oz (\(settingsManager.settings.machineModel.displayName)). You may need to make multiple batches.")
+                            }
+                            .font(.callout)
+                        } else if stats.totalVolumeOz > settingsManager.settings.machineModel.workingCapacity {
+                            HStack {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundStyle(.blue)
+                                Text("Above the recommended \(Int(settingsManager.settings.machineModel.workingCapacity))oz working capacity. Leave headroom for expansion while freezing.")
                             }
                             .font(.callout)
                         }
@@ -670,7 +678,8 @@ public struct RecipeOutputView: View {
     private func calculateStats() -> RecipeStats {
         calculator.calculateStats(
             for: recipe.ingredients,
-            ingredientLookup: database.lookupFunction()
+            ingredientLookup: database.lookupFunction(),
+            servingSizeOz: settingsManager.settings.servingSizeOz
         )
     }
 
@@ -697,8 +706,9 @@ public struct RecipeOutputView: View {
     }
 
     private func estimateFreezeTime(stats: RecipeStats) -> String {
-        // Base time on volume and ABV
-        let volumeFactor = stats.totalVolumeOz / 72.0  // Normalized to standard batch
+        // Base time on volume and ABV relative to the user's machine capacity
+        let capacity = max(1, settingsManager.settings.machineModel.workingCapacity)
+        let volumeFactor = stats.totalVolumeOz / capacity
         let abvFactor = 1.0 + (stats.finalABV / 20.0)  // Higher ABV = longer time
 
         let baseMinutes = 20.0
@@ -817,4 +827,5 @@ struct ShareSheet: UIViewControllerRepresentable {
 #Preview {
     RecipeOutputView(recipe: Recipe(name: "Preview Recipe"))
         .environment(IngredientDatabase.shared)
+        .environment(UserSettingsManager.shared)
 }

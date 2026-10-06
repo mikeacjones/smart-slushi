@@ -205,9 +205,17 @@ struct SlushCalculatorTests {
 
     @Test("Calculate freezing point Fahrenheit")
     func freezingPointFahrenheit() {
-        // 0% ABV should freeze at ~32°F
-        let result = calculator.calculateFreezingPointFahrenheit(abv: 0.0)
-        #expect(abs(result - 31.947) < 0.01)
+        // 0% ABV freezes at 32°F; 10% ABV at -4°C = 24.8°F
+        let atZero = calculator.calculateFreezingPointFahrenheit(abv: 0.0)
+        #expect(abs(atZero - 32.0) < 0.01)
+
+        let atTen = calculator.calculateFreezingPointFahrenheit(abv: 10.0)
+        #expect(abs(atTen - 24.8) < 0.01)
+
+        // Celsius and Fahrenheit must stay consistent
+        let celsius = calculator.calculateFreezingPointCelsius(abv: 10.0)
+        let fromCelsius = celsius * 9.0 / 5.0 + 32.0
+        #expect(abs(atTen - fromCelsius) < 0.01)
     }
 
     @Test("Ford Fry Frozen Margarita calculation")
@@ -258,13 +266,7 @@ struct SlushCalculatorTests {
 
         // Also verify this recipe is too alcoholic for proper slush (ABV > 10%)
         let status = SlushabilityStatus.evaluate(abv: abv, brix: brix)
-        if case .warning = status {
-            // Expected - ABV is borderline high
-        } else if status == .willNotFreeze {
-            // Also acceptable - might be flagged as too high
-        } else {
-            Issue.record("Recipe with 10%+ ABV should produce warning or willNotFreeze")
-        }
+        #expect(status == .tooAlcoholic || status == .willNotFreeze)
     }
 
     @Test("Optimal Brix range at low ABV")
@@ -334,19 +336,76 @@ struct SlushabilityStatusTests {
         #expect(status == .optimal)
     }
 
-    @Test("High ABV returns warning or will not freeze")
+    @Test("High ABV returns tooAlcoholic or will not freeze")
     func highABVStatus() {
         // ABV > 12 should not freeze
         let status12 = SlushabilityStatus.evaluate(abv: 13.0, brix: 14.0)
         #expect(status12 == .willNotFreeze)
 
-        // ABV 10-12 should warn
+        // ABV 10-12 should be too alcoholic
         let status10 = SlushabilityStatus.evaluate(abv: 11.0, brix: 14.0)
-        if case .warning = status10 {
-            // Expected
-        } else {
-            Issue.record("Expected warning for 11% ABV")
+        #expect(status10 == .tooAlcoholic)
+    }
+
+    @Test("Optimal Brix range adjusts with ABV")
+    func abvAwareBrixEvaluation() {
+        let calculator = SlushCalculator()
+
+        // At 10% ABV, optimal Brix is 12.5–14.5 — 12.8 should be optimal
+        // (exactly 10% is still acceptable; only >10% is tooAlcoholic)
+        let range10 = calculator.optimalBrixRange(forABV: 10.0)
+        #expect(abs(range10.lowerBound - 12.5) < 0.01)
+        #expect(abs(range10.upperBound - 14.5) < 0.01)
+        let status10 = SlushabilityStatus.evaluate(abv: 10.0, brix: 12.8, optimalBrixRange: range10)
+        #expect(status10 == .optimal)
+
+        // At 8% ABV with Brix in the ABV-adjusted window
+        let range8 = calculator.optimalBrixRange(forABV: 8.0)
+        let status8 = SlushabilityStatus.evaluate(abv: 8.0, brix: 13.5, optimalBrixRange: range8)
+        #expect(status8 == .optimal)
+
+        // Fixed 13–15 window would call 12.8 notSweetEnough at low ABV,
+        // but at 9% ABV optimal is 12.75–14.75 so 12.8 is fine
+        let range9 = calculator.optimalBrixRange(forABV: 9.0)
+        let statusLow = SlushabilityStatus.evaluate(abv: 9.0, brix: 12.8, optimalBrixRange: range9)
+        #expect(statusLow == .optimal)
+    }
+
+    @Test("Auto-balance converts units when topping up existing ingredients")
+    func autoBalanceUnitConversion() {
+        let optimizer = RecipeOptimizer()
+        let water = Ingredient(id: UUID(), name: "Water", category: .mixer, abv: 0, brix: 0)
+        let vodka = Ingredient(id: UUID(), name: "Vodka", category: .spirit, abv: 40, brix: 0)
+        let syrup = Ingredient(id: UUID(), name: "Simple Syrup", category: .sweetener, abv: 0, brix: 50)
+
+        var recipe = Recipe(name: "Unit Mix")
+        // Water stored in ml — auto-balance must convert oz additions into ml
+        recipe.ingredients = [
+            RecipeIngredient(ingredientId: vodka.id, amount: 8, unit: .oz),
+            RecipeIngredient(ingredientId: water.id, amount: 100, unit: .ml),
+            RecipeIngredient(ingredientId: syrup.id, amount: 2, unit: .oz)
+        ]
+
+        let lookup: (UUID) -> Ingredient? = { id in
+            [water, vodka, syrup].first { $0.id == id }
         }
+
+        let balanced = optimizer.autoBalance(
+            recipe: recipe,
+            targetBrixRange: 13...15,
+            targetABVRange: 5...10,
+            ingredientLookup: lookup,
+            waterIngredientId: water.id,
+            sweetenerIngredientId: syrup.id,
+            sweetenerBrix: 50
+        )
+
+        let waterRow = balanced.ingredients.first { $0.ingredientId == water.id }
+        #expect(waterRow != nil)
+        #expect(waterRow?.unit == .ml)
+        // If units were mixed incorrectly, amount would stay near 100–105;
+        // correct conversion adds enough ml to dilute ABV into range.
+        #expect((waterRow?.amount ?? 0) > 150)
     }
 
     @Test("Low Brix returns appropriate status")
@@ -829,4 +888,63 @@ struct RealWorldRecipeTests {
         // No new ingredients should be added (should only have 4 ingredients)
         #expect(balanced.ingredients.count == 4, "Should not add new ingredients, only adjust existing ones")
     }
+
+    @Test("Auto-balance respects locked ingredients")
+    func autoBalanceRespectsLocks() {
+        var recipe = Recipe(name: "Locked Agave Margarita")
+        recipe.ingredients = [
+            RecipeIngredient(ingredientId: blancoTequila.id, amount: 8, unit: .oz),
+            RecipeIngredient(ingredientId: water.id, amount: 20, unit: .oz),
+            RecipeIngredient(ingredientId: pureAgave.id, amount: 4, unit: .oz, isLocked: true),
+            RecipeIngredient(ingredientId: limeJuice.id, amount: 8, unit: .oz)
+        ]
+
+        let lookup = makeLookup()
+        let balanced = optimizer.autoBalance(
+            recipe: recipe,
+            targetBrixRange: 13...15,
+            targetABVRange: 5...10,
+            ingredientLookup: lookup,
+            waterIngredientId: water.id,
+            sweetenerIngredientId: pureAgave.id,
+            sweetenerBrix: 75
+        )
+
+        let lockedAgave = balanced.ingredients.first { $0.ingredientId == pureAgave.id }
+        #expect(lockedAgave?.amount == 4.0, "Locked agave amount must not change")
+        #expect(lockedAgave?.isLocked == true)
+    }
 }
+
+// MARK: - Template Science Accuracy Tests
+
+@Suite("Template Science Accuracy Tests")
+struct TemplateScienceAccuracyTests {
+    let calculator = SlushCalculator()
+
+    @Test("Bundled templates land in workable Brix and ABV ranges")
+    func bundledTemplatesAreSlushable() {
+        let database = IngredientDatabase.shared
+        let store = RecipeTemplateStore(ingredientDatabase: database)
+
+        #expect(!store.templates.isEmpty, "Templates should load from bundle")
+
+        for template in store.templates {
+            let recipe = template.createRecipe(targetBatchSize: 72)
+            let stats = calculator.calculateStats(
+                for: recipe.ingredients,
+                ingredientLookup: database.lookupFunction()
+            )
+
+            #expect(stats.finalABV <= 10.0, "\(template.name) ABV \(stats.finalABV) exceeds 10%")
+            #expect(stats.finalBrix >= 13.0, "\(template.name) Brix \(stats.finalBrix) below 13")
+            #expect(stats.finalBrix <= 15.0, "\(template.name) Brix \(stats.finalBrix) above 15")
+            #expect(abs(stats.totalVolumeOz - 72.0) < 0.5, "\(template.name) should scale to ~72 oz")
+
+            // Stored expected stats should match live calculation within rounding
+            #expect(abs(template.baseABV - stats.finalABV) < 0.3, "\(template.name) claimed ABV mismatch")
+            #expect(abs(template.baseBrix - stats.finalBrix) < 0.3, "\(template.name) claimed Brix mismatch")
+        }
+    }
+}
+
