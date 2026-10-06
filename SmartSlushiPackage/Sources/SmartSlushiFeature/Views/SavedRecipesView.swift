@@ -162,6 +162,7 @@ public struct SavedRecipesView: View {
     // MARK: - Actions
 
     private func selectRecipe(_ recipe: SavedRecipe) {
+        recipe.restoreCustomIngredients(into: database)
         onSelectRecipe(recipe.toRecipe())
         dismiss()
     }

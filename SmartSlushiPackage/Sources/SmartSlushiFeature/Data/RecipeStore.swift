@@ -83,14 +83,24 @@ public final class RecipeStore {
     }
 
     /// Save a recipe to the database
-    public func save(_ recipe: Recipe, isFavorite: Bool = false) {
+    /// - Parameters:
+    ///   - recipe: Recipe to persist
+    ///   - isFavorite: Favorite flag for new saves
+    ///   - ingredientLookup: Optional lookup used to snapshot custom ingredients for CloudKit sync
+    public func save(
+        _ recipe: Recipe,
+        isFavorite: Bool = false,
+        ingredientLookup: ((UUID) -> Ingredient?)? = nil
+    ) {
         guard let context = modelContext else { return }
+
+        let customs = Self.customIngredients(in: recipe, lookup: ingredientLookup)
 
         // Check if recipe already exists
         if let existing = savedRecipes.first(where: { $0.id == recipe.id }) {
-            existing.update(from: recipe)
+            existing.update(from: recipe, customIngredients: customs)
         } else {
-            let savedRecipe = SavedRecipe(from: recipe, isFavorite: isFavorite)
+            let savedRecipe = SavedRecipe(from: recipe, isFavorite: isFavorite, customIngredients: customs)
             context.insert(savedRecipe)
             savedRecipes.append(savedRecipe)
         }
@@ -101,6 +111,23 @@ public final class RecipeStore {
         } catch {
             print("Error saving recipe: \(error)")
         }
+    }
+
+    private static func customIngredients(
+        in recipe: Recipe,
+        lookup: ((UUID) -> Ingredient?)?
+    ) -> [Ingredient] {
+        guard let lookup else { return [] }
+        var seen = Set<UUID>()
+        var customs: [Ingredient] = []
+        for item in recipe.ingredients {
+            guard !seen.contains(item.ingredientId),
+                  let ingredient = lookup(item.ingredientId),
+                  ingredient.isCustom else { continue }
+            seen.insert(item.ingredientId)
+            customs.append(ingredient)
+        }
+        return customs
     }
 
     /// Delete a saved recipe

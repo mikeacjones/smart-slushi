@@ -681,7 +681,7 @@ public struct RecipeBuilderView: View {
 
     private func saveRecipe() {
         recipe.modifiedAt = Date()
-        recipeStore.save(recipe)
+        recipeStore.save(recipe, ingredientLookup: database.lookupFunction())
         showingSaveConfirmation = true
     }
 

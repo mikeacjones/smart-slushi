@@ -22,6 +22,9 @@ public final class SavedRecipe {
     /// JSON-encoded ingredients
     public var ingredientsData: Data
 
+    /// JSON-encoded custom ingredient snapshots referenced by this recipe (for CloudKit sync)
+    public var customIngredientsData: Data
+
     /// Target batch size in ounces
     public var targetBatchSize: Double
 
@@ -43,7 +46,8 @@ public final class SavedRecipe {
         recipeDescription: String? = nil,
         baseRecipeId: UUID? = nil,
         ingredientsData: Data = Data(),
-        targetBatchSize: Double = 72,
+        customIngredientsData: Data = Data(),
+        targetBatchSize: Double = 64,
         targetUnitRaw: String = "oz",
         createdAt: Date = Date(),
         modifiedAt: Date = Date(),
@@ -54,6 +58,7 @@ public final class SavedRecipe {
         self.recipeDescription = recipeDescription
         self.baseRecipeId = baseRecipeId
         self.ingredientsData = ingredientsData
+        self.customIngredientsData = customIngredientsData
         self.targetBatchSize = targetBatchSize
         self.targetUnitRaw = targetUnitRaw
         self.createdAt = createdAt
@@ -97,8 +102,23 @@ extension SavedRecipe {
         }
     }
 
-    /// Create a SavedRecipe from a Recipe
-    public convenience init(from recipe: Recipe, isFavorite: Bool = false) {
+    /// Decoded custom ingredient snapshots
+    public var customIngredients: [Ingredient] {
+        get {
+            guard !customIngredientsData.isEmpty else { return [] }
+            return (try? JSONDecoder().decode([Ingredient].self, from: customIngredientsData)) ?? []
+        }
+        set {
+            customIngredientsData = (try? JSONEncoder().encode(newValue)) ?? Data()
+        }
+    }
+
+    /// Create a SavedRecipe from a Recipe, optionally capturing custom ingredient snapshots
+    public convenience init(
+        from recipe: Recipe,
+        isFavorite: Bool = false,
+        customIngredients: [Ingredient] = []
+    ) {
         let ingredientsData: Data
         do {
             ingredientsData = try JSONEncoder().encode(recipe.ingredients)
@@ -106,12 +126,15 @@ extension SavedRecipe {
             ingredientsData = Data()
         }
 
+        let customData = (try? JSONEncoder().encode(customIngredients)) ?? Data()
+
         self.init(
             id: recipe.id,
             name: recipe.name,
             recipeDescription: recipe.description,
             baseRecipeId: recipe.baseRecipeId,
             ingredientsData: ingredientsData,
+            customIngredientsData: customData,
             targetBatchSize: recipe.targetBatchSize,
             targetUnitRaw: recipe.targetUnit.rawValue,
             createdAt: recipe.createdAt,
@@ -135,12 +158,22 @@ extension SavedRecipe {
         )
     }
 
-    /// Update from a Recipe struct
-    public func update(from recipe: Recipe) {
+    /// Restore any embedded custom ingredients into the local database
+    public func restoreCustomIngredients(into database: IngredientDatabase) {
+        for ingredient in customIngredients {
+            if database.ingredient(for: ingredient.id) == nil {
+                database.addCustomIngredient(ingredient)
+            }
+        }
+    }
+
+    /// Update from a Recipe struct, refreshing custom ingredient snapshots
+    public func update(from recipe: Recipe, customIngredients: [Ingredient] = []) {
         name = recipe.name
         recipeDescription = recipe.description
         baseRecipeId = recipe.baseRecipeId
         ingredients = recipe.ingredients
+        self.customIngredients = customIngredients
         targetBatchSize = recipe.targetBatchSize
         targetUnit = recipe.targetUnit
         modifiedAt = Date()
