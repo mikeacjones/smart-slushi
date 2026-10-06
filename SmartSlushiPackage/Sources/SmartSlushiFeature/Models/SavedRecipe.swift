@@ -213,6 +213,9 @@ public final class UserPreferencesStore {
     /// Recent ingredient IDs (JSON encoded)
     public var recentIngredientIdsData: Data
 
+    /// Serving size in ounces for serving calculations
+    public var servingSizeOz: Double = 8
+
     public init(
         identifier: String = "default",
         defaultBatchSize: Double = 64,
@@ -221,7 +224,8 @@ public final class UserPreferencesStore {
         sweetnessLevel: Double = 0.5,
         slushThickness: Double = 0.5,
         alcoholStrength: Double = 0.5,
-        recentIngredientIdsData: Data = Data()
+        recentIngredientIdsData: Data = Data(),
+        servingSizeOz: Double = 8
     ) {
         self.identifier = identifier
         self.defaultBatchSize = defaultBatchSize
@@ -231,6 +235,7 @@ public final class UserPreferencesStore {
         self.slushThickness = slushThickness
         self.alcoholStrength = alcoholStrength
         self.recentIngredientIdsData = recentIngredientIdsData
+        self.servingSizeOz = servingSizeOz
     }
 }
 

@@ -17,6 +17,12 @@ public struct SharedRecipeDetailView: View {
     @State private var selectedReportReason: ReportReason = .inappropriate
     @State private var hasReported = false
     @State private var showingImportConfirmation = false
+    @State private var pendingImport: Recipe?
+
+    /// Live vote counts / metadata from the store (falls back to the initial recipe)
+    private var liveRecipe: SharedRecipe {
+        sharedStore.recipes.first(where: { $0.id == recipe.id }) ?? recipe
+    }
 
     public init(recipe: SharedRecipe, onImport: @escaping (Recipe) -> Void) {
         self.recipe = recipe
@@ -31,7 +37,7 @@ public struct SharedRecipeDetailView: View {
                     headerSection
 
                     // Author notes
-                    if let notes = recipe.authorNotes, !notes.isEmpty {
+                    if let notes = liveRecipe.authorNotes, !notes.isEmpty {
                         authorNotesSection(notes: notes)
                     }
 
@@ -46,7 +52,7 @@ public struct SharedRecipeDetailView: View {
                 }
                 .padding()
             }
-            .navigationTitle(recipe.name)
+            .navigationTitle(liveRecipe.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -66,6 +72,7 @@ public struct SharedRecipeDetailView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
+                    .accessibilityLabel("More options")
                 }
             }
             .task {
@@ -76,10 +83,13 @@ public struct SharedRecipeDetailView: View {
             }
             .alert("Recipe Imported", isPresented: $showingImportConfirmation) {
                 Button("OK") {
-                    dismiss()
+                    if let pendingImport {
+                        onImport(pendingImport)
+                        self.pendingImport = nil
+                    }
                 }
             } message: {
-                Text("The recipe has been added to your saved recipes.")
+                Text("The recipe will open in your recipe builder so you can edit and save it.")
             }
         }
     }
@@ -95,7 +105,7 @@ public struct SharedRecipeDetailView: View {
                 voteButton(isUpvote: true)
 
                 VStack(spacing: 4) {
-                    Text("\(recipe.score)")
+                    Text("\(liveRecipe.score)")
                         .font(.system(size: 36, weight: .bold))
                         .foregroundStyle(scoreColor)
 
@@ -104,6 +114,8 @@ public struct SharedRecipeDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(minWidth: 60)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Score \(liveRecipe.score)")
 
                 voteButton(isUpvote: false)
 
@@ -115,16 +127,18 @@ public struct SharedRecipeDetailView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.up")
                         .foregroundStyle(.green)
-                    Text("\(recipe.upvoteCount)")
+                    Text("\(liveRecipe.upvoteCount)")
                 }
                 .font(.subheadline)
+                .accessibilityLabel("\(liveRecipe.upvoteCount) upvotes")
 
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.down")
                         .foregroundStyle(.red)
-                    Text("\(recipe.downvoteCount)")
+                    Text("\(liveRecipe.downvoteCount)")
                 }
                 .font(.subheadline)
+                .accessibilityLabel("\(liveRecipe.downvoteCount) downvotes")
             }
             .foregroundStyle(.secondary)
 
@@ -141,15 +155,15 @@ public struct SharedRecipeDetailView: View {
 
     @ViewBuilder
     private func voteButton(isUpvote: Bool) -> some View {
-        let voteState = sharedStore.voteState(for: recipe)
+        let voteState = sharedStore.voteState(for: liveRecipe)
         let isActive = isUpvote ? voteState.isUpvoted : voteState.isDownvoted
 
         Button {
             Task {
                 if isUpvote {
-                    await sharedStore.toggleUpvote(recipe)
+                    await sharedStore.toggleUpvote(liveRecipe)
                 } else {
-                    await sharedStore.toggleDownvote(recipe)
+                    await sharedStore.toggleDownvote(liveRecipe)
                 }
             }
         } label: {
@@ -164,11 +178,13 @@ public struct SharedRecipeDetailView: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(isUpvote ? "Upvote" : "Downvote")
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 
     private var scoreColor: Color {
-        if recipe.score > 0 { return .green }
-        if recipe.score < 0 { return .red }
+        if liveRecipe.score > 0 { return .green }
+        if liveRecipe.score < 0 { return .red }
         return .primary
     }
 
@@ -312,8 +328,8 @@ public struct SharedRecipeDetailView: View {
     }
 
     private func importRecipe() {
-        let localRecipe = sharedStore.importToPersonal(recipe, database: database)
-        onImport(localRecipe)
+        pendingImport = sharedStore.importToPersonal(liveRecipe, database: database)
+        showingImportConfirmation = true
     }
 
     // MARK: - Report Sheet

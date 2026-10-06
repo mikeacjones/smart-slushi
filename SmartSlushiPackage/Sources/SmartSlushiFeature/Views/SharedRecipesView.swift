@@ -262,7 +262,7 @@ public struct SharedRecipeRow: View {
     let onDownvote: () -> Void
 
     public var body: some View {
-        Button(action: onSelect) {
+        HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 8) {
                 // Header row
                 HStack {
@@ -288,19 +288,7 @@ public struct SharedRecipeRow: View {
                         }
                     }
 
-                    Spacer()
-
-                    // Voting buttons
-                    HStack(spacing: 4) {
-                        voteButton(isUpvote: true)
-
-                        Text("\(recipe.score)")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(scoreColor)
-                            .frame(minWidth: 24)
-
-                        voteButton(isUpvote: false)
-                    }
+                    Spacer(minLength: 0)
                 }
 
                 // Author notes preview
@@ -324,11 +312,30 @@ public struct SharedRecipeRow: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onSelect)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(recipe.name)
+            .accessibilityHint("Opens recipe details")
+
+            // Voting buttons outside the select gesture to avoid nested buttons
+            HStack(spacing: 4) {
+                voteButton(isUpvote: true)
+
+                Text("\(recipe.score)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(scoreColor)
+                    .frame(minWidth: 24)
+                    .accessibilityLabel("Score \(recipe.score)")
+
+                voteButton(isUpvote: false)
+            }
         }
-        .buttonStyle(.plain)
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder

@@ -33,12 +33,13 @@ public final class SlushCalculator: Sendable {
     /// - Parameters:
     ///   - totalVolumeOz: Total volume in ounces
     ///   - servingSizeOz: Size of each serving in ounces
-    /// - Returns: Number of servings (rounded up to nearest whole number)
+    /// - Returns: Number of servings (rounded to nearest whole number).
+    ///   Empty/zero volume returns 0; any positive volume yields at least 1.
     public func calculateServings(
         fromVolumeOz totalVolumeOz: Double,
         servingSizeOz: Double
     ) -> Int {
-        guard servingSizeOz > 0 else { return 0 }
+        guard totalVolumeOz > 0, servingSizeOz > 0 else { return 0 }
         return max(1, Int((totalVolumeOz / servingSizeOz).rounded()))
     }
 

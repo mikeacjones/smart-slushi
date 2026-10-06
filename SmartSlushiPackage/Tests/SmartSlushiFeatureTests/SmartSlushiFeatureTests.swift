@@ -34,6 +34,20 @@ struct MeasurementUnitTests {
         let backToOz = MeasurementUnit.ml.convert(inMl, to: .oz)
         #expect(abs(backToOz - original) < 0.001)
     }
+
+    @Test("Ingredient unit change preserves volume")
+    func ingredientUnitChangePreservesVolume() {
+        // Changing 2 oz → ml must convert amount (not leave amount=2 as 2 ml)
+        var amount = 2.0
+        let from: MeasurementUnit = .oz
+        let to: MeasurementUnit = .ml
+        amount = from.convert(amount, to: to)
+        #expect(abs(amount - 59.147) < 0.01)
+
+        // And back
+        amount = to.convert(amount, to: from)
+        #expect(abs(amount - 2.0) < 0.01)
+    }
 }
 
 // MARK: - Recipe Template Tests
@@ -703,6 +717,12 @@ struct ServingCalculatorTests {
         // Even very small volumes should return at least 1 serving
         let result = calculator.calculateServings(fromVolumeOz: 2, servingSizeOz: 8)
         #expect(result >= 1)
+    }
+
+    @Test("Calculate servings from volume - empty recipe is zero")
+    func servingsEmptyVolumeIsZero() {
+        let result = calculator.calculateServings(fromVolumeOz: 0, servingSizeOz: 8)
+        #expect(result == 0)
     }
 
     @Test("Calculate servings from volume - zero serving size")

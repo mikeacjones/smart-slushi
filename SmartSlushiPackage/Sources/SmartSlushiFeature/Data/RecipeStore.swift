@@ -267,6 +267,7 @@ public final class RecipeStore {
         prefs.defaultBatchSize = settings.defaultBatchSize
         prefs.defaultUnit = settings.preferredUnit
         prefs.machineCapacity = settings.machineModel.totalCapacity
+        prefs.servingSizeOz = settings.servingSizeOz
         prefs.update(from: settings.drinkPreferences)
         savePreferences()
     }
@@ -277,6 +278,7 @@ public final class RecipeStore {
         settings.defaultBatchSize = prefs.defaultBatchSize
         settings.preferredUnit = prefs.defaultUnit
         settings.machineModel = prefs.machineCapacity >= 88 ? .large88oz : .standard72oz
+        settings.servingSizeOz = prefs.servingSizeOz > 0 ? prefs.servingSizeOz : settings.servingSizeOz
         settings.drinkPreferences = prefs.toDrinkPreferences()
     }
 

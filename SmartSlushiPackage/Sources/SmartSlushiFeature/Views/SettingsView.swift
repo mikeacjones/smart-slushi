@@ -55,6 +55,18 @@ public struct SettingsView: View {
             .onDisappear {
                 recipeStore.syncFromUserSettings(settingsManager.settings)
             }
+            .onChange(of: settingsManager.settings.defaultBatchSize) { _, _ in
+                recipeStore.syncFromUserSettings(settingsManager.settings)
+            }
+            .onChange(of: settingsManager.settings.preferredUnit) { _, _ in
+                recipeStore.syncFromUserSettings(settingsManager.settings)
+            }
+            .onChange(of: settingsManager.settings.machineModel) { _, _ in
+                recipeStore.syncFromUserSettings(settingsManager.settings)
+            }
+            .onChange(of: settingsManager.settings.servingSizeOz) { _, _ in
+                recipeStore.syncFromUserSettings(settingsManager.settings)
+            }
         }
     }
 

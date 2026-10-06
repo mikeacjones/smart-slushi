@@ -215,11 +215,14 @@ struct BatchScalingView: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(numberOfPeople == count ? .blue : .primary)
+                        .accessibilityLabel("\(count) people")
                     }
 
                     Stepper("", value: $numberOfPeople, in: 1...50)
                         .labelsHidden()
                         .frame(width: 100)
+                        .accessibilityLabel("Number of people")
+                        .accessibilityValue("\(numberOfPeople)")
                 }
             }
 
@@ -242,11 +245,14 @@ struct BatchScalingView: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(servingsPerPerson == count ? .blue : .primary)
+                        .accessibilityLabel("\(count) servings per person")
                     }
 
                     Stepper("", value: $servingsPerPerson, in: 1...10)
                         .labelsHidden()
                         .frame(width: 100)
+                        .accessibilityLabel("Servings per person")
+                        .accessibilityValue("\(servingsPerPerson)")
                 }
             }
         }

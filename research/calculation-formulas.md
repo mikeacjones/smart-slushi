@@ -308,29 +308,34 @@ func scaleRecipe(
 
 ## User Preference Mapping
 
-Map preference sliders (0.0-1.0) to target ranges:
+Map preference sliders (0.0-1.0) to target ranges, then **clamp Brix into the ABV-aware science window** from `optimalBrixRange(forABV:)`:
 
 ```swift
 struct DrinkPreferences {
-    var sweetness: Double      // 0.0 = tart, 1.0 = sweet
-    var thickness: Double      // 0.0 = thin/sippable, 1.0 = thick
-    var alcoholStrength: Double // 0.0 = light, 1.0 = strong
+    var sweetnessLevel: Double   // 0.0 = tart, 1.0 = sweet
+    var slushThickness: Double   // 0.0 = thin/sippable, 1.0 = thick
+    var alcoholStrength: Double  // 0.0 = light, 1.0 = strong
 }
 
-func mapPreferencesToTargets(_ prefs: DrinkPreferences) -> (brixRange: ClosedRange<Double>, abvRange: ClosedRange<Double>) {
-    // Sweetness: 0.0 -> Brix 12-13, 1.0 -> Brix 15-16
-    let brixBase = 12.0 + (prefs.sweetness * 3.0)
-
-    // Thickness: adjusts Brix slightly (+/- 0.5)
-    let thicknessAdjust = (prefs.thickness - 0.5) * 1.0
-
-    let brixLow = brixBase + thicknessAdjust
-    let brixHigh = brixLow + 1.0
-
+func toOptimizationTargets(_ prefs: DrinkPreferences) -> (brixRange: ClosedRange<Double>, abvRange: ClosedRange<Double>) {
     // Alcohol: 0.0 -> ABV 5-6%, 1.0 -> ABV 9-10%
     let abvBase = 5.0 + (prefs.alcoholStrength * 4.0)
     let abvLow = abvBase
     let abvHigh = abvBase + 1.0
+    let abvMid = (abvLow + abvHigh) / 2.0
+
+    // Science-backed Brix window for the target ABV (see Optimal Brix Range Based on ABV)
+    let scienceBrix = optimalBrixRange(forABV: abvMid)
+    let windowWidth = scienceBrix.upperBound - scienceBrix.lowerBound
+
+    // Sweetness / thickness nudge *within* the science window, then clamp
+    let sweetnessShift = (prefs.sweetnessLevel - 0.5) * windowWidth
+    let thicknessAdjust = (prefs.slushThickness - 0.5) * (windowWidth * 0.5)
+
+    var brixLow = scienceBrix.lowerBound + sweetnessShift + thicknessAdjust
+    var brixHigh = brixLow + max(1.0, windowWidth * 0.5)
+    brixLow = min(max(brixLow, scienceBrix.lowerBound), scienceBrix.upperBound - 0.5)
+    brixHigh = min(max(brixHigh, brixLow + 0.5), scienceBrix.upperBound)
 
     return (
         brixRange: brixLow...brixHigh,
@@ -338,6 +343,8 @@ func mapPreferencesToTargets(_ prefs: DrinkPreferences) -> (brixRange: ClosedRan
     )
 }
 ```
+
+> **Note:** An older preference map (`12 + sweetness×3 ± thickness`) is obsolete. Always clamp preference Brix into `optimalBrixRange` so taste sliders cannot request unworkable sugar levels for the chosen ABV.
 
 ## Slushability Status
 

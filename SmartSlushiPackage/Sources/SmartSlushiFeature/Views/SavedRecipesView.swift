@@ -148,6 +148,7 @@ public struct SavedRecipesView: View {
         } label: {
             Image(systemName: "arrow.up.arrow.down")
         }
+        .accessibilityLabel("Sort recipes")
     }
 
     // MARK: - Filtering

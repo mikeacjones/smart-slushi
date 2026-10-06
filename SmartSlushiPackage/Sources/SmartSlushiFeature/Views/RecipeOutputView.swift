@@ -642,7 +642,13 @@ public struct RecipeOutputView: View {
     }
 
     private func importFromClipboard() {
-        guard let clipboardContent = UIPasteboard.general.string else { return }
+        guard let clipboardContent = UIPasteboard.general.string, !clipboardContent.isEmpty else {
+            confirmationMessage = "Clipboard is empty — copy a recipe JSON first."
+            showingCopyConfirmation = true
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.error)
+            return
+        }
 
         do {
             let importedRecipe = try serializer.importFromJSON(clipboardContent, ingredientDatabase: database)
@@ -653,6 +659,8 @@ public struct RecipeOutputView: View {
             generator.notificationOccurred(.success)
             dismiss()
         } catch {
+            confirmationMessage = "Couldn't import recipe. Check that the clipboard has valid Smart Slushi JSON."
+            showingCopyConfirmation = true
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.error)
         }
@@ -747,6 +755,10 @@ struct ShoppingItemRow: View {
                     .font(.title3)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(item.ingredient.name)
+            .accessibilityValue(isChecked ? "Checked" : "Unchecked")
+            .accessibilityHint("Marks shopping list item")
+            .accessibilityAddTraits(.isButton)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.ingredient.name)

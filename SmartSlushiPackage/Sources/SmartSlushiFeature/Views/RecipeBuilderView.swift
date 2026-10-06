@@ -149,6 +149,7 @@ public struct RecipeBuilderView: View {
                     } label: {
                         Image(systemName: "line.3.horizontal")
                     }
+                    .accessibilityLabel("Menu")
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -356,6 +357,7 @@ public struct RecipeBuilderView: View {
                         .labelStyle(.iconOnly)
                         .font(.title2)
                 }
+                .accessibilityLabel("Add ingredient")
             }
 
             if recipe.ingredients.isEmpty {
@@ -586,10 +588,10 @@ public struct RecipeBuilderView: View {
         let originalBatchSize = beforeStats.totalVolumeOz
         let hasLockedIngredients = recipe.ingredients.contains(where: \.isLocked)
 
-        // Aggregate amounts by ingredientId (duplicate rows can exist after locked-balancer path)
-        var beforeIngredients: [UUID: Double] = [:]
+        // Aggregate volumes in oz by ingredientId (duplicate rows / mixed units safe)
+        var beforeIngredientsOz: [UUID: Double] = [:]
         for item in recipe.ingredients {
-            beforeIngredients[item.ingredientId, default: 0] += item.amount
+            beforeIngredientsOz[item.ingredientId, default: 0] += item.volumeInOz
         }
 
         // Preference targets clamped to ABV-aware science windows
@@ -626,26 +628,24 @@ public struct RecipeBuilderView: View {
             servingSizeOz: settingsManager.settings.servingSizeOz
         )
 
-        // Determine ingredient changes (summed by ingredientId)
-        var afterAmounts: [UUID: (amount: Double, unit: MeasurementUnit)] = [:]
+        // Determine ingredient changes in ounces (summed by ingredientId)
+        var afterAmountsOz: [UUID: Double] = [:]
         for ingredient in balanced.ingredients {
-            let existing = afterAmounts[ingredient.ingredientId]
-            afterAmounts[ingredient.ingredientId] = (
-                amount: (existing?.amount ?? 0) + ingredient.amount,
-                unit: ingredient.unit
-            )
+            afterAmountsOz[ingredient.ingredientId, default: 0] += ingredient.volumeInOz
         }
 
         var ingredientChanges: [OptimizationResult.IngredientChange] = []
-        for (ingredientId, after) in afterAmounts {
-            let previousAmount = beforeIngredients[ingredientId]
+        let allIds = Set(beforeIngredientsOz.keys).union(afterAmountsOz.keys)
+        for ingredientId in allIds {
+            let previousOz = beforeIngredientsOz[ingredientId]
+            let afterOz = afterAmountsOz[ingredientId] ?? 0
             let ingredientName = database.ingredient(for: ingredientId)?.name ?? "Unknown"
-            if previousAmount == nil || abs(after.amount - (previousAmount ?? 0)) > 0.01 {
+            if previousOz == nil || abs(afterOz - (previousOz ?? 0)) > 0.01 {
                 ingredientChanges.append(OptimizationResult.IngredientChange(
                     ingredientName: ingredientName,
-                    previousAmount: previousAmount,
-                    newAmount: after.amount,
-                    unit: after.unit
+                    previousAmount: previousOz,
+                    newAmount: afterOz,
+                    unit: .oz
                 ))
             }
         }
@@ -721,7 +721,10 @@ public struct RecipeBuilderView: View {
     private func clearRecipe() {
         withAnimation {
             recipe.ingredients.removeAll()
+            recipe.targetBatchSize = settingsManager.settings.defaultBatchSize
+            recipe.targetUnit = displayUnit
             recipe.modifiedAt = Date()
+            batchSizeInput = formatBatchSize(recipe.targetBatchSize, for: displayUnit)
         }
     }
 }
@@ -911,6 +914,9 @@ struct StatBadgeWithTarget: View {
                 showingTooltip = true
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(tooltip != nil ? .isButton : [])
+        .accessibilityHint(tooltip != nil ? "Shows explanation for \(title)" : "")
         .sheet(isPresented: $showingTooltip) {
             if let tooltip {
                 TooltipView(content: tooltip)
@@ -953,6 +959,9 @@ struct SlushabilityIndicator: View {
                 showingTooltip = true
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(showTooltip ? .isButton : [])
+        .accessibilityHint(showTooltip ? "Shows slushability explanation" : "")
         .sheet(isPresented: $showingTooltip) {
             TooltipView(content: .slushability)
         }
@@ -1054,6 +1063,10 @@ struct IngredientRow: View {
                 .frame(width: 60)
                 .disabled(recipeIngredient.isLocked)
                 .accessibilityLabel("Unit")
+                .onChange(of: recipeIngredient.unit) { oldUnit, newUnit in
+                    guard oldUnit != newUnit else { return }
+                    recipeIngredient.amount = oldUnit.convert(recipeIngredient.amount, to: newUnit)
+                }
             }
 
             Button(role: .destructive) {
