@@ -1012,6 +1012,26 @@ struct RealWorldRecipeTests {
         let total = scaled.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
         #expect(abs(total - 80.0) < 0.01)
     }
+
+    @Test("Scale recipe leaves recipe unchanged when target is below locked volume")
+    func scaleRecipeBelowLockedVolumeUnchanged() {
+        var recipe = Recipe(name: "Locked Heavy")
+        recipe.ingredients = [
+            RecipeIngredient(ingredientId: blancoTequila.id, amount: 30, unit: .oz, isLocked: true),
+            RecipeIngredient(ingredientId: water.id, amount: 10, unit: .oz)
+        ]
+
+        let scaled = calculator.scaleRecipe(
+            recipe,
+            toBatchSize: 20,
+            ingredientLookup: makeLookup()
+        )
+
+        let tequila = scaled.ingredients.first { $0.ingredientId == blancoTequila.id }
+        #expect(tequila?.amount == 30.0)
+        let waterAmount = scaled.ingredients.first { $0.ingredientId == water.id }?.amount ?? 0
+        #expect(abs(waterAmount - 10.0) < 0.01)
+    }
 }
 
 // MARK: - Template Science Accuracy Tests

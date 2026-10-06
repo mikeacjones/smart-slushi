@@ -607,7 +607,19 @@ struct BatchScalingView: View {
 
     private func applyScaleFactor(_ factor: Double) {
         let currentTotal = recipe.ingredients.reduce(0.0) { $0 + $1.volumeInOz }
-        let newSize = currentTotal * factor
+        let lockedVolume = recipe.ingredients
+            .filter(\.isLocked)
+            .reduce(0.0) { $0 + $1.volumeInOz }
+        let unlockedVolume = currentTotal - lockedVolume
+
+        // With locks, factor applies to unlocked volume only so "2x" means double unlocked
+        let newSize: Double
+        if lockedVolume > 0, unlockedVolume > 0 {
+            newSize = lockedVolume + unlockedVolume * factor
+        } else {
+            newSize = currentTotal * factor
+        }
+
         let displayValue = MeasurementUnit.oz.convert(newSize, to: selectedUnit)
         targetSizeInput = formatForUnit(displayValue, unit: selectedUnit)
         calculatePreview()
